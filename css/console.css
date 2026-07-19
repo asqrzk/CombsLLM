@@ -1,0 +1,43 @@
+/* ============================================================
+   Console: engine dashboard panels, metrics, download tracker.
+   ============================================================ */
+
+#console-panel {
+  flex-shrink: 0;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--muted) / 0.4);
+  overflow: hidden;
+  max-height: 80vh;
+  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+#console-panel.collapsed { max-height: 0; border-bottom-width: 0; }
+.console-inner {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;
+  padding: 0.75rem;
+  max-width: 72rem; margin: 0 auto; width: 100%;
+}
+.panel {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  padding: 1rem;
+}
+.panel-title { font-weight: 600; font-size: 0.8125rem; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.375rem; }
+.panel-title svg { color: hsl(var(--muted-foreground)); }
+.metric { display: flex; justify-content: space-between; align-items: center; font-size: 0.8125rem; padding: 0.25rem 0; color: hsl(var(--muted-foreground)); }
+.metric > span:last-child { color: hsl(var(--foreground)); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+.progress-track { background: hsl(var(--secondary)); height: 0.5rem; border-radius: 999px; overflow: hidden; margin: 0.5rem 0 0.75rem; }
+.progress-fill { background: hsl(var(--primary)); height: 100%; width: 0%; border-radius: 999px; transition: width 0.3s ease, background 0.3s; }
+.progress-fill.warning { background: hsl(240 3.8% 46.1%); }
+.progress-fill.danger { background: hsl(var(--destructive)); }
+
+.control-row { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.625rem; flex-wrap: wrap; }
+.control-row .spacer { flex: 1; }
+.field-group { display: flex; gap: 0.375rem; align-items: center; font-size: 0.8125rem; color: hsl(var(--muted-foreground)); }
+
+/* Download tracker */
+#download-ui { display: none; margin-top: 0.75rem; padding: 0.625rem 0.75rem; background: hsl(var(--muted) / 0.6); border: 1px dashed hsl(var(--border)); border-radius: calc(var(--radius) - 2px); }
+#download-ui.visible { display: block; }
+.download-row { display: flex; justify-content: space-between; font-size: 0.75rem; font-weight: 500; margin-bottom: 0.375rem; }
+#download-percent { font-variant-numeric: tabular-nums; color: hsl(var(--muted-foreground)); }

@@ -1,0 +1,28 @@
+/* ============================================================
+   Responsive: mobile (app feel) and desktop-only tweaks.
+   ============================================================ */
+
+@media (max-width: 768px) {
+  #sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0;
+    transform: translateX(-100%);
+    margin-left: 0 !important;
+    width: min(17.5rem, 82vw);
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  #app.sidebar-open #sidebar { transform: translateX(0); box-shadow: 0 0 40px rgba(0,0,0,0.15); }
+  #app.sidebar-open #sidebar-backdrop { display: block; opacity: 1; }
+  .console-inner { grid-template-columns: 1fr; }
+  #console-panel { overflow-y: auto; }
+  .header-title { font-size: 0.875rem; }
+  .engine-status-text { display: none; }
+  #chat-box { padding: 1rem 0.875rem 1.25rem; gap: 1.125rem; }
+  .message.user .bubble { max-width: 92%; }
+  #toast-container { top: 0.75rem; right: 0.75rem; left: 0.75rem; width: auto; }
+  .composer-hint { display: none; }
+}
+
+@media (min-width: 769px) {
+  #sidebar-close-btn { display: none; }
+}
