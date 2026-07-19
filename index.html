@@ -311,6 +311,15 @@
       white-space: pre-wrap;
       word-break: break-word;
     }
+    .message.user .bubble .chat-image {
+      display: block;
+      max-width: min(16rem, 100%);
+      max-height: 16rem;
+      object-fit: contain;
+      border-radius: 0.625rem;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .message.user .bubble .chat-image + span { display: block; margin-top: 0.375rem; }
     .message.ai { align-items: stretch; }
     .message.ai .markdown-content { max-width: 100%; }
 
@@ -589,13 +598,30 @@
           </div>
           <div class="metric"><span>Site footprint</span><span id="disk-usage-txt">Calculating…</span></div>
           <div class="control-row">
+            <input type="password" id="hf-token" class="input" style="flex: 1; min-width: 0;" placeholder="HF access token — only needed for gated repos (google/gemma-3n…)" autocomplete="off">
+          </div>
+          <div class="control-row">
             <select id="model-select" class="input" style="flex: 1; min-width: 0;">
-              <option value="gemma-4-E2B-it-web">Gemma 4 E2B (2-bit, ~2.5GB)</option>
-              <option value="gemma-4-E4B-it-web">Gemma 4 E4B (4-bit, ~3.6GB)</option>
+              <optgroup label="Gemma 4 · LiteRT-LM (text)">
+                <option value="gemma-4-E2B-it-web">Gemma 4 E2B (2-bit, ~2.5GB)</option>
+                <option value="gemma-4-E4B-it-web">Gemma 4 E4B (4-bit, ~3.6GB)</option>
+              </optgroup>
+              <optgroup label="Gemma 4 · tasks-genai .task (experimental vision)">
+                <option value="gemma-4-E2B-it-web-task">Gemma 4 E2B · stable 0.10.29</option>
+                <option value="gemma-4-E2B-it-web-task-rc">Gemma 4 E2B · RC 1.0.0</option>
+                <option value="gemma-4-E4B-it-web-task">Gemma 4 E4B · stable 0.10.29</option>
+                <option value="gemma-4-E4B-it-web-task-rc">Gemma 4 E4B · RC 1.0.0</option>
+              </optgroup>
+              <optgroup label="Gemma-3n · tasks-genai (vision + audio)">
+                <option value="gemma-3n-E2B-it-web">Gemma-3n E2B (int4)</option>
+                <option value="gemma-3n-E4B-it-web">Gemma-3n E4B (int4)</option>
+              </optgroup>
             </select>
           </div>
           <div class="control-row">
             <label class="switch-label"><input type="checkbox" id="reasoning-toggle" checked> Reasoning</label>
+            <label class="switch-label" title="Enable image input · requires engine reinitialize"><input type="checkbox" id="vision-toggle"> Vision</label>
+            <label class="switch-label" title="Enable audio input · requires engine reinitialize"><input type="checkbox" id="audio-toggle"> Audio</label>
             <div class="spacer"></div>
             <button id="load-btn" class="btn btn-primary btn-sm" title="Click to initialize · Hold to offload">Initialize</button>
             <button id="clear-cache-btn" class="btn btn-outline btn-sm">Manage storage</button>
@@ -630,7 +656,7 @@
           </button>
         </div>
         <div class="composer-bar">
-          <input type="file" id="image-upload" accept="image/png, image/jpeg" hidden>
+          <input type="file" id="image-upload" accept="image/png, image/jpeg, image/webp" hidden>
           <button id="attach-btn" class="btn btn-ghost btn-icon" aria-label="Attach image" disabled title="Attach image">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
           </button>
@@ -639,7 +665,7 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
           </button>
         </div>
-        <div class="composer-hint">Enter to send · Shift + Enter for a new line · Chats auto-save to this browser</div>
+        <div class="composer-hint">Enter to send · Shift + Enter for a new line · Images: PNG/JPEG/WebP ≤ 2 MB · Chats auto-save to this browser</div>
       </div>
     </div>
   </main>

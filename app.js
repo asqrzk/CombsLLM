@@ -21,6 +21,8 @@ const clearCacheBtn = $('clear-cache-btn');
 const contextLimitInput = $('context-limit');
 const cavemanToggle = $('caveman-toggle');
 const reasoningToggle = $('reasoning-toggle');
+const visionToggle = $('vision-toggle');
+const audioToggle = $('audio-toggle');
 const menuBtn = $('menu-btn');
 const sidebarBackdrop = $('sidebar-backdrop');
 const sidebarCloseBtn = $('sidebar-close-btn');
@@ -51,6 +53,10 @@ const storageModalPurge = $('storage-modal-purge');
 // State
 // ============================================================
 let engine = null;
+let llmInference = null;      // MediaPipe tasks-genai backend (experimental multimodal)
+let backendKind = 'litert';   // 'litert' | 'tasks'
+let activeModelDef = null;    // registry entry of the mounted model
+let modelBlobUrl = null;      // object URL handed to the engine; revoke on swap
 let conversation = null;
 let activeMessagesLog = [];
 let activeChatId = null;
@@ -60,17 +66,99 @@ let generating = false;
 let pruning = false;
 let isRestoring = false;
 const SYSTEM_PREFACE = "You are a hardware-constrained AI assistant. Respond accurately.";
-const MODEL_NAMES = {
-  'gemma-4-E2B-it-web': 'Gemma 4 E2B',
-  'gemma-4-E4B-it-web': 'Gemma 4 E4B'
+
+// ---- Model registry ----
+// 'litert' backend -> @litert-lm/core (.litertlm, text-only)
+// 'tasks' backend  -> @mediapipe/tasks-genai (multimodal; sdk picks the runtime)
+// promptFormat: 'gemma4' = <|turn> template, 'gemma3' = <start_of_turn> template
+const MODELS = {
+  'gemma-4-E2B-it-web': {
+    label: 'Gemma 4 E2B',
+    repo: 'litert-community/gemma-4-E2B-it-litert-lm',
+    file: 'gemma-4-E2B-it-web.litertlm',
+    backend: 'litert',
+    promptFormat: 'gemma4'
+  },
+  'gemma-4-E2B-it-web-task': {
+    label: 'Gemma 4 E2B',
+    repo: 'litert-community/gemma-4-E2B-it-litert-lm',
+    file: 'gemma-4-E2B-it-web.task',
+    backend: 'tasks',
+    sdk: '0.10.29',
+    promptFormat: 'gemma4'
+  },
+  'gemma-4-E2B-it-web-task-rc': {
+    label: 'Gemma 4 E2B',
+    repo: 'litert-community/gemma-4-E2B-it-litert-lm',
+    file: 'gemma-4-E2B-it-web.task',
+    backend: 'tasks',
+    sdk: '1.0.0-rc.20260718',
+    promptFormat: 'gemma4'
+  },
+  'gemma-4-E4B-it-web': {
+    label: 'Gemma 4 E4B',
+    repo: 'litert-community/gemma-4-E4B-it-litert-lm',
+    file: 'gemma-4-E4B-it-web.litertlm',
+    backend: 'litert',
+    promptFormat: 'gemma4'
+  },
+  'gemma-4-E4B-it-web-task': {
+    label: 'Gemma 4 E4B',
+    repo: 'litert-community/gemma-4-E4B-it-litert-lm',
+    file: 'gemma-4-E4B-it-web.task',
+    backend: 'tasks',
+    sdk: '0.10.29',
+    promptFormat: 'gemma4'
+  },
+  'gemma-4-E4B-it-web-task-rc': {
+    label: 'Gemma 4 E4B',
+    repo: 'litert-community/gemma-4-E4B-it-litert-lm',
+    file: 'gemma-4-E4B-it-web.task',
+    backend: 'tasks',
+    sdk: '1.0.0-rc.20260718',
+    promptFormat: 'gemma4'
+  },
+  'gemma-3n-E2B-it-web': {
+    label: 'Gemma-3n E2B',
+    repo: 'google/gemma-3n-E2B-it-litert-lm',
+    file: 'gemma-3n-E2B-it-int4-Web.litertlm',
+    backend: 'tasks',
+    sdk: '0.10.29',
+    promptFormat: 'gemma3'
+  },
+  'gemma-3n-E4B-it-web': {
+    label: 'Gemma-3n E4B',
+    repo: 'google/gemma-3n-E4B-it-litert-lm',
+    file: 'gemma-3n-E4B-it-int4-Web.litertlm',
+    backend: 'tasks',
+    sdk: '0.10.29',
+    promptFormat: 'gemma3'
+  }
 };
+
+// ---- Image intake policy ----
+const IMAGE_MAX_BYTES = 2 * 1024 * 1024; // hard reject above 2 MB
+const IMAGE_MAX_DIM = 1024;              // downscale longest side to this (px)
+const IMAGE_MIME_WHITELIST = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
+// MediaPipe tasks-genai (multimodal backend).
+// Stable 0.10.x cannot create the Gemma-4 vision encoder on WebGPU
+// ("Image models could not be created", upstream #2150); the daily 1.0.0 RC
+// channel may carry a fix. The SDK version is selected per model registry entry.
+const TASKS_GENAI_STABLE = '0.10.29';
+function loadTasksGenai(version) {
+  return import(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-genai@${version}/+esm`);
+}
+function tasksGenaiWasmRoot(version) {
+  return `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-genai@${version}/wasm`;
+}
 
 function getSelectedModel() {
   return $('model-select').value;
 }
 
 function getModelName(modelId) {
-  return MODEL_NAMES[modelId] || modelId;
+  return MODELS[modelId]?.label || modelId;
 }
 
 function syncModelSelect(modelId) {
@@ -391,7 +479,7 @@ function scrollChatToBottom(force = false) {
   if (force || nearBottom) chatScroll.scrollTop = chatScroll.scrollHeight;
 }
 
-function addUserBubble(text) {
+function addUserBubble(text, imageDataUrl = null) {
   const div = document.createElement('div');
   div.className = 'message user';
   const label = document.createElement('div');
@@ -399,7 +487,19 @@ function addUserBubble(text) {
   label.textContent = 'You';
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
-  bubble.textContent = text;
+  if (imageDataUrl) {
+    const img = document.createElement('img');
+    img.src = imageDataUrl;
+    img.alt = 'Attached image';
+    img.className = 'chat-image';
+    img.loading = 'lazy';
+    bubble.appendChild(img);
+  }
+  if (text) {
+    const span = document.createElement('span');
+    span.textContent = text;
+    bubble.appendChild(span);
+  }
   div.append(label, bubble);
   chatBox.appendChild(div);
   syncEmptyState();
@@ -435,7 +535,8 @@ function renderAllMessages() {
   for (const msg of activeMessagesLog) {
     if (msg.role === 'system') continue;
     if (msg.role === 'user') {
-      addUserBubble(contentToText(msg.content));
+      const imgPart = Array.isArray(msg.content) ? msg.content.find(p => p.type === 'image') : null;
+      addUserBubble(contentToText(msg.content), imgPart?.dataUrl || null);
     } else {
       const { content, metrics } = addAiMessageShell(getModelName(chatModel));
       renderMarkdownInto(content, contentToText(msg.content));
@@ -449,8 +550,19 @@ function renderAllMessages() {
   scrollChatToBottom(true);
 }
 
+// Session config derived from the modality toggles. Modalities are opt-in:
+// enabling vision/audio without matching engine-side executor options makes
+// the C++ runtime fail ("vision options should not be null"), so they default
+// to off and only take effect on (re)initialization.
+function modalitySessionConfig() {
+  return {
+    visionModalityEnabled: visionToggle.checked,
+    audioModalityEnabled: audioToggle.checked
+  };
+}
+
 async function rebuildEngineConversation() {
-  if (!engine) return;
+  if (!engine || backendKind === 'tasks') return; // tasks backend rebuilds from the log per send
   if (conversation) await conversation.delete();
   const useCaveman = cavemanToggle.checked;
   // Ensure the system preface is present so restored context keeps the persona.
@@ -459,16 +571,18 @@ async function rebuildEngineConversation() {
     : [{ role: 'system', content: SYSTEM_PREFACE }, ...activeMessagesLog];
   // Rebuild the entire context in one shot via the conversation preface.
   // This avoids generating responses for historical turns and keeps the
-  // conversation free for the user's next message.
+  // conversation free for the user's next message. Image parts stored as
+  // data URLs are re-encoded as base64 image parts for the engine.
+  const engineMessages = [];
+  for (const msg of messages) {
+    engineMessages.push({
+      role: msg.role,
+      content: msg.role === 'system' ? msg.content : await contentForEngine(msg.content, useCaveman)
+    });
+  }
   conversation = await engine.createConversation({
-    preface: {
-      messages: messages.map(msg => ({
-        role: msg.role,
-        content: msg.role === 'system'
-          ? msg.content
-          : preparePayload(msg.content, useCaveman)
-      }))
-    }
+    sessionConfig: modalitySessionConfig(),
+    preface: { messages: engineMessages }
   });
 }
 
@@ -484,10 +598,11 @@ async function startNewChat(focusInput = true) {
   headerTitle.textContent = 'New chat';
   await refreshSidebar();
   closeMobileSidebar();
-  if (engine) {
+  if (engine && backendKind === 'litert') {
     try {
       await conversation.delete();
       conversation = await engine.createConversation({
+        sessionConfig: modalitySessionConfig(),
         preface: { messages: [{ role: 'system', content: SYSTEM_PREFACE }] }
       });
     } catch (e) { console.warn(e); }
@@ -515,11 +630,11 @@ async function openChat(id) {
   closeMobileSidebar();
   updateMetricsDashboard();
 
-  if (engine && activeMessagesLog.some(m => m.role === 'user')) {
+  if ((engine || llmInference) && activeMessagesLog.some(m => m.role === 'user')) {
     if (activeChatModel && currentModel && currentModel !== activeChatModel) {
       // Swap to the model this conversation was created with.
       await initModel();
-    } else {
+    } else if (backendKind === 'litert') {
       toast('Replaying chat into engine context…', 'info', 2500);
       try {
         await rebuildEngineConversation();
@@ -528,7 +643,8 @@ async function openChat(id) {
         toast('Context restore failed: ' + e.message, 'error');
       }
     }
-  } else if (!engine) {
+    // tasks backend: context is rebuilt from the log on every send — nothing to do.
+  } else if (!engine && !llmInference) {
     toast('Chat loaded. Initialize the engine to continue it.', 'info', 3200);
   }
 }
@@ -576,14 +692,7 @@ async function updateMetricsDashboard() {
 
   let estimatedTokens = 0;
   activeMessagesLog.forEach(msg => {
-    if (typeof msg.content === 'string') {
-      estimatedTokens += Math.ceil(msg.content.split(/\s+/).length * 1.3);
-    } else if (Array.isArray(msg.content)) {
-      msg.content.forEach(part => {
-        if (part.type === 'text') estimatedTokens += Math.ceil(part.text.split(/\s+/).length * 1.3);
-        if (part.type === 'image') estimatedTokens += 512;
-      });
-    }
+    estimatedTokens += estimateMessageTokens(msg);
   });
 
   const maxThreshold = parseInt(contextLimitInput.value) || 32000;
@@ -620,23 +729,11 @@ function compressToCaveman(text) {
   }).join(' ');
 }
 
-function preparePayload(content, applyCaveman) {
-  if (!applyCaveman) return content;
-  if (typeof content === 'string') return compressToCaveman(content);
-  if (Array.isArray(content)) {
-    return content.map(part => {
-      if (part.type === 'text') return { ...part, text: compressToCaveman(part.text) };
-      return part;
-    });
-  }
-  return content;
-}
-
 // ============================================================
 // 6. CONTEXT & STATE MANAGEMENT
 // ============================================================
 async function executeContextPruning() {
-  if (!engine) { toast('Initialize the engine first.', 'warning', 2600); return; }
+  if (!engine && !llmInference) { toast('Initialize the engine first.', 'warning', 2600); return; }
   if (pruning) return;
   pruning = true;
   const maxThreshold = parseInt(contextLimitInput.value) || 2048;
@@ -646,10 +743,7 @@ async function executeContextPruning() {
     const idx = activeMessagesLog.findIndex(m => m.role !== 'system');
     if (idx === -1) break;
     activeMessagesLog.splice(idx, 1);
-    let currentEst = activeMessagesLog.reduce((acc, current) => {
-      const textVal = typeof current.content === 'string' ? current.content : JSON.stringify(current.content);
-      return acc + Math.ceil(textVal.split(/\s+/).length * 1.3);
-    }, 0);
+    const currentEst = activeMessagesLog.reduce((acc, m) => acc + estimateMessageTokens(m), 0);
     if (currentEst <= maxThreshold * 0.7) break;
   }
 
@@ -786,6 +880,11 @@ function setEngineStatus(state, text) {
   engineStatusText.textContent = text;
 }
 
+function hfAuthHeaders() {
+  const token = ($('hf-token')?.value || '').trim();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function fetchAndCacheModel(modelUrl) {
   const cacheName = 'litert-models-v1';
   const cache = await caches.open(cacheName);
@@ -793,7 +892,7 @@ async function fetchAndCacheModel(modelUrl) {
 
   if (cachedResponse) {
     toast('Model found in local cache — loading instantly from disk.', 'info', 3000);
-    const blob = await cachedResponse.blob();
+    const blob = await cachedResponse.blob(); // disk-backed handle, not a heap copy
     return URL.createObjectURL(blob);
   }
 
@@ -805,55 +904,63 @@ async function fetchAndCacheModel(modelUrl) {
 
   downloadUI.classList.add('visible');
 
-  const response = await fetch(modelUrl);
-  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const response = await fetch(modelUrl, { headers: hfAuthHeaders() });
+  if (!response.ok) {
+    const gatedHint = (response.status === 401 || response.status === 403)
+      ? ' — gated repo. Accept the license on its Hugging Face page, then paste your HF access token in the console field and retry.'
+      : '';
+    throw new Error(`HTTP error! status: ${response.status}${gatedHint}`);
+  }
 
   const contentLength = response.headers.get('content-length');
   const totalBytes = parseInt(contentLength, 10);
   let loadedBytes = 0;
 
-  const reader = response.body.getReader();
-  const stream = new ReadableStream({
-    async start(controller) {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        loadedBytes += value.byteLength;
-        if (totalBytes) {
-          const percent = Math.round((loadedBytes / totalBytes) * 100);
-          percentTxt.innerText = `${percent}%`;
-          progressBar.style.width = `${percent}%`;
-          statusTxt.innerText = `Downloading: ${(loadedBytes / 1024 / 1024).toFixed(1)} MB / ${(totalBytes / 1024 / 1024).toFixed(1)} MB`;
-        }
-        controller.enqueue(value);
+  // Progress tap: OBSERVE chunks as they flow through — no clone(), no blob(),
+  // no buffering. The stream is consumed exactly once, written incrementally
+  // to the disk-backed Cache API. Peak JS heap use: one network chunk.
+  const progressTap = new TransformStream({
+    transform(chunk, controller) {
+      loadedBytes += chunk.byteLength;
+      if (totalBytes) {
+        const percent = Math.round((loadedBytes / totalBytes) * 100);
+        percentTxt.innerText = `${percent}%`;
+        progressBar.style.width = `${percent}%`;
+        statusTxt.innerText = `Downloading: ${(loadedBytes / 1024 / 1024).toFixed(1)} MB / ${(totalBytes / 1024 / 1024).toFixed(1)} MB`;
       }
-      controller.close();
+      controller.enqueue(chunk);
     }
   });
 
-  const newResponse = new Response(stream, { headers: response.headers });
-  const blob = await newResponse.clone().blob();
-  await cache.put(modelUrl, newResponse);
+  const streamingBody = response.body.pipeThrough(progressTap);
+  await cache.put(modelUrl, new Response(streamingBody, { headers: response.headers }));
 
   downloadUI.classList.remove('visible');
   toast('Download complete — model cached on this device.', 'success', 3200);
+
+  // Re-open from cache: the browser hands us a disk-backed blob reference
+  // (~0 heap), which the engine then streams weights from.
+  const stored = await cache.match(modelUrl);
+  const blob = await stored.blob();
   return URL.createObjectURL(blob);
 }
 
 async function offloadEngine() {
-  if (!engine) return;
+  if (!engine && !llmInference) return;
   loadBtn.disabled = true;
   $('model-select').disabled = false;
   setEngineStatus('', 'Idle');
   try {
-    if (conversation) await conversation.delete();
-    await engine.delete();
+    if (conversation) { await conversation.delete(); conversation = null; }
+    if (engine) { await engine.delete(); engine = null; }
+    if (llmInference) { llmInference.close(); llmInference = null; }
   } catch (e) {
     console.warn('Engine offload error:', e);
   }
-  engine = null;
-  conversation = null;
+  backendKind = 'litert';
   currentModel = null;
+  activeModelDef = null;
+  if (modelBlobUrl) { URL.revokeObjectURL(modelBlobUrl); modelBlobUrl = null; }
   inputField.disabled = true;
   attachBtn.disabled = true;
   compressBtn.disabled = true;
@@ -870,38 +977,76 @@ async function initModel() {
   loadBtn.textContent = 'Initializing…';
   setEngineStatus('loading', 'Loading');
   const modelName = getSelectedModel();
-  const remoteModelUrl = `https://huggingface.co/litert-community/${modelName.replace('-web', '-litert-lm')}/resolve/main/${modelName}.litertlm`;
+  const modelDef = MODELS[modelName] || {
+    repo: `litert-community/${modelName.replace('-web', '-litert-lm')}`,
+    file: `${modelName}.litertlm`,
+    backend: 'litert',
+    sdk: TASKS_GENAI_STABLE,
+    promptFormat: 'gemma4'
+  };
+  const useTasksBackend = modelDef.backend === 'tasks' || visionToggle.checked || audioToggle.checked;
+  // A litert model forced into tasks mode via the modality toggles swaps to
+  // the .task artifact; native tasks entries (incl. gemma-3n) keep their file.
+  const modelFile = (modelDef.backend === 'litert' && useTasksBackend)
+    ? modelDef.file.replace(/\.litertlm$/, '.task')
+    : modelDef.file;
+  const remoteModelUrl = `https://huggingface.co/${modelDef.repo}/resolve/main/${modelFile}`;
 
   try {
-    if (engine) {
-      if (conversation) {
-        await conversation.delete();
-        conversation = null;
-      }
-      await engine.delete();
+    if (conversation) {
+      await conversation.delete();
+      conversation = null;
     }
+    if (engine) {
+      await engine.delete();
+      engine = null;
+    }
+    if (llmInference) {
+      llmInference.close();
+      llmInference = null;
+    }
+    if (modelBlobUrl) { URL.revokeObjectURL(modelBlobUrl); modelBlobUrl = null; }
 
     const localBlobUrl = await fetchAndCacheModel(remoteModelUrl);
+    modelBlobUrl = localBlobUrl;
 
-    toast(`Mounting engine for ${modelName}…`, 'info', 2800);
-
-    engine = await Engine.create({
-      model: localBlobUrl,
-      mainExecutorSettings: { maxNumTokens: 8192 }
-    });
+    if (useTasksBackend) {
+      const sdkVersion = modelDef.sdk || TASKS_GENAI_STABLE;
+      toast(`Mounting tasks-genai ${sdkVersion} engine for ${modelDef.label || modelName}…`, 'info', 2800);
+      const { FilesetResolver, LlmInference } = await loadTasksGenai(sdkVersion);
+      const genai = await FilesetResolver.forGenAiTasks(tasksGenaiWasmRoot(sdkVersion));
+      llmInference = await LlmInference.createFromOptions(genai, {
+        baseOptions: { modelAssetPath: localBlobUrl },
+        maxTokens: 8192,
+        maxNumImages: visionToggle.checked ? 10 : 0,
+        supportAudio: audioToggle.checked
+      });
+      backendKind = 'tasks';
+    } else {
+      toast(`Mounting engine for ${modelName}…`, 'info', 2800);
+      engine = await Engine.create({
+        model: localBlobUrl,
+        mainExecutorSettings: { maxNumTokens: 8192 }
+      });
+      backendKind = 'litert';
+    }
 
     currentModel = modelName;
+    activeModelDef = modelDef;
     if (activeChatModel === null) activeChatModel = currentModel;
     else if (activeChatModel !== currentModel) activeChatModel = currentModel;
 
-    if (activeMessagesLog.some(m => m.role === 'user')) {
-      toast('Replaying chat into engine context…', 'info', 2500);
-      await rebuildEngineConversation();
-      toast('Chat restored — context ready', 'success', 2600);
-    } else {
-      conversation = await engine.createConversation({
-        preface: { messages: [{ role: 'system', content: SYSTEM_PREFACE }] }
-      });
+    if (backendKind === 'litert') {
+      if (activeMessagesLog.some(m => m.role === 'user')) {
+        toast('Replaying chat into engine context…', 'info', 2500);
+        await rebuildEngineConversation();
+        toast('Chat restored — context ready', 'success', 2600);
+      } else {
+        conversation = await engine.createConversation({
+          sessionConfig: modalitySessionConfig(),
+          preface: { messages: [{ role: 'system', content: SYSTEM_PREFACE }] }
+        });
+      }
     }
 
     inputField.disabled = false;
@@ -913,7 +1058,9 @@ async function initModel() {
     loadBtn.disabled = false;
     $('model-select').disabled = false;
 
-    toast('Engine ready — WebGPU inference running natively.', 'success');
+    toast(backendKind === 'tasks'
+      ? 'Engine ready — experimental multimodal via tasks-genai.'
+      : 'Engine ready — WebGPU inference running natively.', 'success');
     // On mobile, tuck the console away so the chat is front and center
     if (!desktopMQ.matches) {
       consolePanel.classList.add('collapsed');
@@ -924,7 +1071,11 @@ async function initModel() {
     await updateMetricsDashboard();
     await persistActiveChat();
   } catch (error) {
-    toast(`Engine mount failure: ${error.message}`, 'error', 6000);
+    const visionHint = /image models could not be created/i.test(error.message)
+      ? ' — Gemma-4 vision is not supported by this tasks-genai build yet.'
+      : '';
+    toast(`Engine mount failure: ${error.message}${visionHint}`, 'error', 6000);
+    backendKind = 'litert';
     setEngineStatus('', 'Error');
     loadBtn.textContent = engine ? 'Reinitialize' : 'Initialize engine';
     loadBtn.disabled = false;
@@ -933,19 +1084,235 @@ async function initModel() {
 }
 
 // ============================================================
+// 7b. IMAGE PIPELINE  (validate -> lossless pass-through or downscale -> store)
+// ============================================================
+// Note on "lossless": pixel-for-pixel lossless downscaling does not exist.
+// Strategy: images already within bounds pass through UNTOUCHED (truly
+// lossless). Larger ones are downscaled to 1024px and re-encoded at high
+// quality — visually lossless for inference, since the vision encoder
+// resamples every input to its fixed patch grid anyway.
+// Why not WebGPU for this? createImageBitmap + canvas 2D resize are already
+// GPU-accelerated by the browser, and the WebGPU device is busy running the
+// model. A WGSL resize shader would add complexity for zero measurable gain.
+
+function validateImageFile(file) {
+  if (!IMAGE_MIME_WHITELIST.has(file.type)) {
+    return `Unsupported format "${file.type || 'unknown'}". Use PNG, JPEG or WebP.`;
+  }
+  if (file.size > IMAGE_MAX_BYTES) {
+    return `"${file.name}" is ${formatBytes(file.size)} — the limit is ${formatBytes(IMAGE_MAX_BYTES)}.`;
+  }
+  return null;
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function dataUrlToBase64(dataUrl) {
+  // Strip the "data:image/webp;base64," prefix — the C++ runtime wants raw base64.
+  return dataUrl.split(',', 2)[1];
+}
+
+let webpEncodeSupported = null;
+function supportsWebpEncode() {
+  if (webpEncodeSupported === null) {
+    webpEncodeSupported = document.createElement('canvas')
+      .toDataURL('image/webp').startsWith('data:image/webp');
+  }
+  return webpEncodeSupported;
+}
+
+async function processImageFile(file) {
+  const err = validateImageFile(file);
+  if (err) throw new Error(err);
+
+  const bitmap = await createImageBitmap(file);
+  const { width, height } = bitmap;
+  const scale = Math.min(1, IMAGE_MAX_DIM / Math.max(width, height));
+
+  // Already within bounds — keep the original bytes, zero re-encode (lossless).
+  if (scale === 1) {
+    const dataUrl = await blobToDataUrl(file);
+    bitmap.close();
+    return { dataUrl, width, height, resized: false };
+  }
+
+  const w = Math.round(width * scale);
+  const h = Math.round(height * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  const useWebp = supportsWebpEncode();
+  if (!useWebp) { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); } // JPEG has no alpha
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close();
+
+  const encode = (type, quality) => new Promise(r => canvas.toBlob(r, type, quality));
+  let blob = useWebp ? await encode('image/webp', 0.92) : await encode('image/jpeg', 0.92);
+  if (!blob) blob = await encode('image/png'); // last-resort fallback
+  if (!blob) throw new Error('Image re-encode failed in this browser.');
+
+  const dataUrl = await blobToDataUrl(blob);
+  return { dataUrl, width: w, height: h, resized: true, originalWidth: width, originalHeight: height };
+}
+
+// Convert a logged message (text / part array with dataUrl images) into the
+// payload shape the engine expects. NOTE: @litert-lm/core passes messages to
+// the WASM runtime via JSON.stringify, so ImageBitmap cannot cross the
+// boundary. We emit {"type":"image","blob":<base64>} which matches the
+// C++ runtime's data_utils image-part format.
+async function contentForEngine(content, applyCaveman) {
+  if (typeof content === 'string') return applyCaveman ? compressToCaveman(content) : content;
+  if (Array.isArray(content)) {
+    const parts = [];
+    for (const part of content) {
+      if (part.type === 'text') {
+        parts.push({ type: 'text', text: applyCaveman ? compressToCaveman(part.text) : part.text });
+      } else if (part.type === 'image' && part.dataUrl) {
+        parts.push({ type: 'image', blob: await dataUrlToBase64(part.dataUrl) });
+      }
+    }
+    return parts;
+  }
+  return content;
+}
+
+// Build a full prompt array for the tasks-genai backend from the message log.
+// tasks-genai has no chat-template engine, so we replicate the model's Gemma-4
+// template manually: <|turn>role ... <turn|>, with image parts as {imageSource}
+// (the runtime swaps each object for the image token + vision embeddings).
+function buildTasksPrompt(log, useCaveman, format = 'gemma4') {
+  if (format === 'gemma3') return buildGemma3Prompt(log, useCaveman);
+  const parts = [];
+  const cx = (t) => (useCaveman ? compressToCaveman(t) : t);
+  const sys = log.find(m => m.role === 'system');
+  if (sys) {
+    parts.push('<|turn>system\n', contentToText(sys.content).trim(), '<turn|>\n');
+  }
+  for (const m of log) {
+    if (m.role === 'system') continue;
+    const role = m.role === 'assistant' ? 'model' : 'user';
+    parts.push(`<|turn>${role}\n`);
+    if (typeof m.content === 'string') {
+      parts.push(cx(m.content));
+    } else if (Array.isArray(m.content)) {
+      for (const part of m.content) {
+        if (part.type === 'text') {
+          parts.push(cx(part.text));
+        } else if (part.type === 'image' && part.dataUrl) {
+          parts.push('\n\n', { imageSource: part.dataUrl }, '\n\n');
+        }
+      }
+    }
+    parts.push('<turn|>\n');
+  }
+  parts.push('<|turn>model\n');
+  return parts;
+}
+
+// Classic Gemma template (<start_of_turn>) used by Gemma-3n and all other
+// web-converted Gemma models. Gemma-3n has no system turn — the system
+// preface is merged into the first user turn, per Gemma convention.
+function buildGemma3Prompt(log, useCaveman) {
+  const parts = [];
+  const cx = (t) => (useCaveman ? compressToCaveman(t) : t);
+  const sysMsg = log.find(m => m.role === 'system');
+  const sysText = sysMsg ? contentToText(sysMsg.content).trim() : '';
+  let sysPending = sysText.length > 0;
+  for (const m of log) {
+    if (m.role === 'system') continue;
+    const role = m.role === 'assistant' ? 'model' : 'user';
+    parts.push(`<start_of_turn>${role}\n`);
+    if (role === 'user' && sysPending) {
+      parts.push(sysText, '\n\n');
+      sysPending = false;
+    }
+    if (typeof m.content === 'string') {
+      parts.push(cx(m.content));
+    } else if (Array.isArray(m.content)) {
+      for (const part of m.content) {
+        if (part.type === 'text') {
+          parts.push(cx(part.text));
+        } else if (part.type === 'image' && part.dataUrl) {
+          parts.push('\n', { imageSource: part.dataUrl }, '\n');
+        }
+      }
+    }
+    parts.push('<end_of_turn>\n');
+  }
+  parts.push('<start_of_turn>model\n');
+  return parts;
+}
+
+function estimateMessageTokens(msg) {
+  let tokens = 0;
+  if (typeof msg.content === 'string') {
+    tokens += Math.ceil(msg.content.split(/\s+/).length * 1.3);
+  } else if (Array.isArray(msg.content)) {
+    for (const part of msg.content) {
+      if (part.type === 'text') tokens += Math.ceil(part.text.split(/\s+/).length * 1.3);
+      else if (part.type === 'image') tokens += 512; // vision-encoder cost after downscale
+    }
+  }
+  return tokens;
+}
+
+// ============================================================
 // 8. MESSAGING
 // ============================================================
 function syncSendState() {
+  const ready = engine || llmInference;
   const hasContent = inputField.value.trim().length > 0 || imageUpload.files.length > 0;
-  sendBtn.disabled = !engine || generating || !hasContent;
+  sendBtn.disabled = !ready || generating || !hasContent;
 }
 
 async function sendMessage() {
   const text = inputField.value.trim();
   const file = imageUpload.files[0];
-  if ((!text && !file) || !engine || generating) return;
+  if ((!text && !file) || (!engine && !llmInference) || generating) return;
 
   generating = true;
+  syncSendState();
+
+  // Validate + downscale BEFORE clearing the composer, so a rejection
+  // doesn't eat the user's typed message.
+  let imagePart = null;
+  if (file) {
+    if (!visionToggle.checked) {
+      toast('Vision is off. Enable the Vision toggle and reinitialize the engine to send images.', 'warning', 4800);
+      generating = false;
+      syncSendState();
+      return;
+    }
+    try {
+      const processed = await processImageFile(file);
+      imagePart = {
+        type: 'image',
+        dataUrl: processed.dataUrl,
+        name: file.name,
+        width: processed.width,
+        height: processed.height
+      };
+      if (processed.resized) {
+        toast(`Image downscaled ${processed.originalWidth}×${processed.originalHeight} → ${processed.width}×${processed.height} for efficient inference.`, 'info', 3200);
+      }
+    } catch (err) {
+      toast(`Image rejected: ${err.message}`, 'error', 4500);
+      generating = false;
+      syncSendState();
+      return;
+    }
+  }
+
   inputField.value = '';
   inputField.style.height = 'auto';
   inputField.disabled = true;
@@ -953,18 +1320,17 @@ async function sendMessage() {
 
   const contentStructure = [];
   if (text) contentStructure.push({ type: 'text', text });
+  if (imagePart) contentStructure.push(imagePart);
 
-  if (file) {
-    addUserBubble(`[Image: ${file.name}] ${text}`.trim());
-    const bitmap = await createImageBitmap(file);
-    contentStructure.push({ type: 'image', data: bitmap });
-    imageUpload.value = '';
-    attachChip.classList.remove('visible');
-    activeMessagesLog.push({ role: 'user', content: `[Image: ${file.name}] ${text}`.trim() });
-  } else {
-    addUserBubble(text);
-    activeMessagesLog.push({ role: 'user', content: text });
-  }
+  // Single text part stays a plain string; anything with an image becomes a part array.
+  const logContent = (contentStructure.length === 1 && contentStructure[0].type === 'text')
+    ? text
+    : contentStructure;
+
+  addUserBubble(text, imagePart?.dataUrl || null);
+  activeMessagesLog.push({ role: 'user', content: logContent });
+  imageUpload.value = '';
+  attachChip.classList.remove('visible');
 
   await persistActiveChat();
   await updateMetricsDashboard();
@@ -988,27 +1354,39 @@ async function sendMessage() {
 
   try {
     const useCaveman = cavemanToggle.checked;
-    const finalPayload = preparePayload(
-      contentStructure.length === 1 && contentStructure[0].type === 'text'
-        ? contentStructure[0].text
-        : contentStructure,
-      useCaveman
-    );
-    if (useCaveman) console.log('Caveman Payload Sent:', finalPayload);
 
-    const stream = conversation.sendMessageStreaming(finalPayload);
-    for await (const chunk of stream) {
-      for (const item of chunk.content) {
-        if (item.type === 'text') {
-          generated += item.text;
+    if (backendKind === 'tasks') {
+      // tasks-genai keeps no conversation state — rebuild the full prompt
+      // from the log on every send (images ride along as {imageSource} parts).
+      const prompt = buildTasksPrompt(activeMessagesLog, useCaveman, activeModelDef?.promptFormat || 'gemma4');
+      const responseText = await llmInference.generateResponse(prompt, (partial) => {
+        if (partial) {
+          generated += partial;
           scheduleRender();
+        }
+      });
+      if (!generated && responseText) generated = responseText;
+    } else {
+      const finalPayload = await contentForEngine(logContent, useCaveman);
+      if (useCaveman) console.log('Caveman Payload Sent:', finalPayload);
+
+      const stream = conversation.sendMessageStreaming(finalPayload);
+      for await (const chunk of stream) {
+        for (const item of chunk.content) {
+          if (item.type === 'text') {
+            generated += item.text;
+            scheduleRender();
+          }
         }
       }
     }
     activeMessagesLog.push({ role: 'assistant', content: generated });
   } catch (error) {
+    const visionFailed = /image models could not be created/i.test(error.message);
     generated += `\n\n*[Hardware truncation triggered: ${error.message}]*`;
-    toast(`Generation interrupted: ${error.message}`, 'error', 5000);
+    toast(visionFailed
+      ? 'Vision encoder failed to initialize — Gemma-4 vision is not supported by this tasks-genai build on WebGPU yet.'
+      : `Generation interrupted: ${error.message}`, 'error', 5000);
   }
 
   renderMarkdownInto(content, generated, { streaming: false });
@@ -1060,7 +1438,22 @@ attachBtn.addEventListener('click', () => imageUpload.click());
 imageUpload.addEventListener('change', () => {
   const f = imageUpload.files[0];
   if (f) {
-    attachChipName.textContent = f.name;
+    if (!visionToggle.checked) {
+      toast('Vision is off. Enable the Vision toggle in the engine console, then reinitialize the engine to attach images.', 'warning', 5200);
+      imageUpload.value = '';
+      attachChip.classList.remove('visible');
+      syncSendState();
+      return;
+    }
+    const err = validateImageFile(f);
+    if (err) {
+      toast(err, 'error', 4500);
+      imageUpload.value = '';
+      attachChip.classList.remove('visible');
+      syncSendState();
+      return;
+    }
+    attachChipName.textContent = `${f.name} · ${formatBytes(f.size)}`;
     attachChip.classList.add('visible');
   } else {
     attachChip.classList.remove('visible');
@@ -1082,7 +1475,7 @@ let longPressTriggered = false;
 const LONG_PRESS_MS = 800;
 
 function startLoadBtnPress(e) {
-  if (!engine) return;
+  if (!engine && !llmInference) return;
   pressTimer = setTimeout(() => {
     pressTimer = null;
     longPressTriggered = true;
@@ -1141,6 +1534,21 @@ reasoningToggle.addEventListener('change', () => {
   // Re-render visible AI messages to show/hide thinking blocks
   renderAllMessages();
 });
+
+// Modality toggles: persisted, applied at next engine (re)initialization.
+function onModalityToggle(name, input) {
+  localStorage.setItem(`combsllm.${name}`, input.checked ? '1' : '0');
+  if (engine) {
+    toast(`${name === 'vision' ? 'Vision' : 'Audio'} ${input.checked ? 'enabled' : 'disabled'} — reinitialize the engine to apply.`, 'info', 3600);
+  }
+}
+visionToggle.addEventListener('change', () => onModalityToggle('vision', visionToggle));
+audioToggle.addEventListener('change', () => onModalityToggle('audio', audioToggle));
+
+$('hf-token').addEventListener('change', (e) => {
+  localStorage.setItem('combsllm.hfToken', e.target.value.trim());
+  if (e.target.value.trim()) toast('HF token saved locally — gated repos will use it on next download.', 'success', 2800);
+});
 $('model-select').addEventListener('change', async () => {
   if (!engine) return;
   if (generating) {
@@ -1157,6 +1565,13 @@ $('model-select').addEventListener('change', async () => {
     consolePanel.classList.add('collapsed');
     toggleConsoleBtn.classList.remove('active');
   }
+
+  // Restore modality toggle preferences
+  visionToggle.checked = localStorage.getItem('combsllm.vision') === '1';
+  audioToggle.checked = localStorage.getItem('combsllm.audio') === '1';
+
+  // Restore HF token (used for gated repos)
+  $('hf-token').value = localStorage.getItem('combsllm.hfToken') || '';
 
   try {
     await refreshSidebar();
