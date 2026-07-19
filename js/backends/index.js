@@ -4,6 +4,6 @@
 import { LitertBackend } from './litert.js';
 import { TasksBackend } from './tasks.js';
 
-export function createBackend(modelDef) {
-  return modelDef.backend === 'tasks' ? new TasksBackend(modelDef) : new LitertBackend();
+export function createBackend(runtime, modelDef) {
+  return runtime === 'tasks' ? new TasksBackend(modelDef) : new LitertBackend();
 }

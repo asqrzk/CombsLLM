@@ -1,0 +1,42 @@
+[
+  {
+    "name": "Gemma 4 E2B · LiteRT-LM · text only",
+    "model": "gemma-4-E2B-it-web",
+    "runtime": "litert",
+    "maxTokens": 8192,
+    "maxNumImages": 0,
+    "vision": false,
+    "audio": false,
+    "caveman": true
+  },
+  {
+    "name": "Gemma 4 E4B · LiteRT-LM · text only",
+    "model": "gemma-4-E4B-it-web",
+    "runtime": "litert",
+    "maxTokens": 8192,
+    "maxNumImages": 0,
+    "vision": false,
+    "audio": false,
+    "caveman": true
+  },
+  {
+    "name": "Gemma-3n E2B · tasks-genai · vision + audio",
+    "model": "gemma-3n-E2B-it-web",
+    "runtime": "tasks",
+    "maxTokens": 8192,
+    "maxNumImages": 10,
+    "vision": true,
+    "audio": true,
+    "caveman": true
+  },
+  {
+    "name": "Gemma-3n E4B · tasks-genai · vision + audio",
+    "model": "gemma-3n-E4B-it-web",
+    "runtime": "tasks",
+    "maxTokens": 8192,
+    "maxNumImages": 10,
+    "vision": true,
+    "audio": true,
+    "caveman": true
+  }
+]

@@ -39,7 +39,7 @@ export function deriveTitle(log) {
   const firstUser = log.find(m => m.role === 'user');
   if (!firstUser) return 'New chat';
   let t = contentToText(firstUser.content).replace(/\[Image:[^\]]*\]/g, '').trim();
-  if (!t) t = 'Image chat';
+  if (!t) t = 'Media chat';
   return t.length > 48 ? t.slice(0, 48).trimEnd() + '…' : t;
 }
 
@@ -52,6 +52,7 @@ export function estimateMessageTokens(msg) {
     for (const part of msg.content) {
       if (part.type === 'text') tokens += Math.ceil(part.text.split(/\s+/).length * 1.3);
       else if (part.type === 'image') tokens += 512;
+      else if (part.type === 'audio') tokens += Math.ceil((part.duration || 8) * 32);
     }
   }
   return tokens;

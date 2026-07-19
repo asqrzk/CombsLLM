@@ -65,6 +65,7 @@
     <!-- Engine console -->
     <section id="console-panel">
       <div class="console-inner">
+        <div class="console-col">
         <!-- System monitor -->
         <div class="panel">
           <div class="panel-title">
@@ -74,54 +75,85 @@
           <div class="metric"><span>Browser JS Heap</span><span id="js-heap-txt">N/A</span></div>
           <div class="metric"><span>Estimated KV Cache</span><span id="kv-cache-txt">0 tokens</span></div>
           <div class="progress-track"><div id="context-progress" class="progress-fill"></div></div>
+          <div class="metric"><span>Site footprint</span><span id="disk-usage-txt">Calculating…</span></div>
           <div class="control-row">
             <div class="field-group">
               <label for="context-limit">Cap</label>
               <input type="number" id="context-limit" class="input" value="32000" min="512" max="8192" style="width: 5rem;">
             </div>
             <button id="compress-btn" class="btn btn-outline btn-sm" disabled>Prune context</button>
-            <div class="spacer"></div>
-            <label class="switch-label"><input type="checkbox" id="caveman-toggle" checked> Caveman compression</label>
+            <button id="clear-cache-btn" class="btn btn-outline btn-sm">Manage storage</button>
           </div>
         </div>
 
-        <!-- Storage & model -->
+        <!-- Runtime & configuration -->
+        <div class="panel">
+          <div class="panel-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M2 14h4"/><path d="M10 8h4"/><path d="M18 16h4"/></svg>
+            Runtime &amp; Configuration
+          </div>
+          <div class="control-row" style="margin-top: 0;">
+            <div class="field-group">
+              <label for="preset-select">Preset</label>
+              <select id="preset-select" class="input"><option value="">Custom</option></select>
+            </div>
+            <div class="field-group">
+              <label for="runtime-select">Runtime</label>
+              <select id="runtime-select" class="input">
+                <option value="litert">LiteRT-LM</option>
+                <option value="tasks">MediaPipe tasks-genai</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label for="max-tokens">Max tokens</label>
+              <input type="number" id="max-tokens" class="input" value="8192" min="512" max="131072" step="512" style="width: 6rem;">
+            </div>
+            <div class="field-group">
+              <label for="max-images">Max images</label>
+              <input type="number" id="max-images" class="input" value="10" min="0" max="50" style="width: 4.5rem;">
+            </div>
+          </div>
+          <div class="control-row">
+            <label class="switch-label" title="Drop stop words from replayed context to save KV cache"><input type="checkbox" id="caveman-toggle"> Caveman</label>
+            <label class="switch-label"><input type="checkbox" id="reasoning-toggle" checked> Reasoning</label>
+            <label class="switch-label" title="Enable image input · live per session on LiteRT-LM, reinitialize on tasks-genai"><input type="checkbox" id="vision-toggle"> Vision</label>
+            <label class="switch-label" title="Enable audio input · live per session on LiteRT-LM, reinitialize on tasks-genai"><input type="checkbox" id="audio-toggle"> Audio</label>
+          </div>
+          <div class="panel-note">
+            Runtime, max tokens &amp; max images apply on initialize. Vision/Audio apply live per session on LiteRT-LM; on tasks-genai they require reinitialize. Any model × any runtime is allowed — incompatible combinations will fail at mount or send time.
+          </div>
+        </div>
+        </div>
+
+        <!-- Models -->
         <div class="panel">
           <div class="panel-title">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-            Storage &amp; Model
+            Models
           </div>
-          <div class="metric"><span>Site footprint</span><span id="disk-usage-txt">Calculating…</span></div>
-          <div class="control-row">
-            <input type="password" id="hf-token" class="input" style="flex: 1; min-width: 0;" placeholder="HF access token — only needed for gated repos (google/gemma-3n…)" autocomplete="off">
-          </div>
-          <div class="control-row">
-            <select id="model-select" class="input" style="flex: 1; min-width: 0;">
-              <optgroup label="Gemma 4 · LiteRT-LM">
-                <option value="gemma-4-E2B-it-web">Gemma 4 E2B · text</option>
-                <option value="gemma-4-E4B-it-web">Gemma 4 E4B · text</option>
-              </optgroup>
-              <optgroup label="Gemma 4 · tasks-genai (.task)">
-                <option value="gemma-4-E2B-it-web-task">Gemma 4 E2B · text, vision</option>
-                <option value="gemma-4-E4B-it-web-task">Gemma 4 E4B · text, vision</option>
-              </optgroup>
-              <optgroup label="Gemma-3n · tasks-genai">
-                <option value="gemma-3n-E2B-it-web">Gemma-3n E2B · text, vision, audio</option>
-                <option value="gemma-3n-E4B-it-web">Gemma-3n E4B · text, vision, audio</option>
-              </optgroup>
-            </select>
-          </div>
-          <div class="control-row">
-            <label class="switch-label"><input type="checkbox" id="reasoning-toggle" checked> Reasoning</label>
-            <label class="switch-label" title="Enable image input · requires engine reinitialize"><input type="checkbox" id="vision-toggle"> Vision</label>
-            <label class="switch-label" title="Enable audio input · requires engine reinitialize"><input type="checkbox" id="audio-toggle"> Audio</label>
-            <div class="spacer"></div>
-            <button id="load-btn" class="btn btn-primary btn-sm" title="Click to initialize · Hold to offload">Initialize</button>
-            <button id="clear-cache-btn" class="btn btn-outline btn-sm">Manage storage</button>
+          <div class="model-picker">
+            <div class="model-picker-toolbar">
+              <input type="search" id="model-search" class="input" placeholder="Filter models…">
+              <button id="hf-token-toggle" class="btn btn-outline btn-sm" type="button" title="Hugging Face access token (gated repos)">HF token</button>
+            </div>
+            <div id="hf-token-row" class="hf-token-row hidden">
+              <input type="password" id="hf-token" class="input" placeholder="HF access token (gated repos)" autocomplete="off">
+              <button id="hf-token-eye" class="btn btn-ghost btn-icon btn-sm" type="button" aria-label="Show or hide token">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-3.5 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+              <button id="hf-token-save" class="btn btn-primary btn-sm" type="button">Save</button>
+            </div>
+            <div class="model-filters" id="model-filters"></div>
+            <div class="model-list" id="model-list"></div>
+            <div class="model-cache-count" id="model-cache-count">…</div>
           </div>
           <div id="download-ui">
             <div class="download-row"><span id="download-status">Initiating download…</span><span id="download-percent">0%</span></div>
             <div class="progress-track" style="margin: 0;"><div id="download-progress" class="progress-fill"></div></div>
+          </div>
+          <div class="control-row">
+            <div class="spacer"></div>
+            <button id="load-btn" class="btn btn-primary btn-sm" title="Click to initialize · Hold to offload">Initialize</button>
           </div>
         </div>
       </div>
@@ -148,10 +180,20 @@
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
           </button>
         </div>
+        <div id="audio-chip">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v4"/></svg>
+          <span id="audio-chip-name"></span>
+          <button id="audio-chip-remove" aria-label="Remove voice message">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+        </div>
         <div class="composer-bar">
           <input type="file" id="image-upload" accept="image/png, image/jpeg, image/webp" hidden>
           <button id="attach-btn" class="btn btn-ghost btn-icon" aria-label="Attach image" disabled title="Attach image">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          </button>
+          <button id="mic-btn" class="btn btn-ghost btn-icon" aria-label="Record voice message" disabled title="Record voice message">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v4"/></svg>
           </button>
           <textarea id="prompt-input" rows="1" placeholder="Initialize the engine to begin…" disabled></textarea>
           <button id="send-btn" aria-label="Send message" disabled>

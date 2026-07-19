@@ -89,7 +89,7 @@ export function scrollChatToBottom(force = false) {
   if (force || nearBottom) chatScroll.scrollTop = chatScroll.scrollHeight;
 }
 
-export function addUserBubble(text, imageDataUrl = null) {
+export function addUserBubble(text, { image = null, audio = null } = {}) {
   const div = document.createElement('div');
   div.className = 'message user';
   const label = document.createElement('div');
@@ -97,13 +97,20 @@ export function addUserBubble(text, imageDataUrl = null) {
   label.textContent = 'You';
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
-  if (imageDataUrl) {
+  if (image) {
     const img = document.createElement('img');
-    img.src = imageDataUrl;
+    img.src = image;
     img.alt = 'Attached image';
     img.className = 'chat-image';
     img.loading = 'lazy';
     bubble.appendChild(img);
+  }
+  if (audio) {
+    const player = document.createElement('audio');
+    player.controls = true;
+    player.src = audio;
+    player.className = 'chat-audio';
+    bubble.appendChild(player);
   }
   if (text) {
     const span = document.createElement('span');
@@ -145,8 +152,11 @@ export function renderAllMessages() {
   for (const msg of state.activeMessagesLog) {
     if (msg.role === 'system') continue;
     if (msg.role === 'user') {
-      const imgPart = Array.isArray(msg.content) ? msg.content.find(p => p.type === 'image') : null;
-      addUserBubble(contentToText(msg.content), imgPart?.dataUrl || null);
+      const parts = Array.isArray(msg.content) ? msg.content : [];
+      addUserBubble(contentToText(msg.content), {
+        image: parts.find(p => p.type === 'image')?.dataUrl || null,
+        audio: parts.find(p => p.type === 'audio')?.dataUrl || null
+      });
     } else {
       const { content, metrics } = addAiMessageShell(getModelName(chatModel));
       renderMarkdownInto(content, contentToText(msg.content));

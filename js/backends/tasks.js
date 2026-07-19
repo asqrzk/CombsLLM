@@ -4,7 +4,7 @@
 // full message log as a manually templated prompt (see prompts.js).
 // The SDK is loaded from jsDelivr at the version pinned by the model.
 // ============================================================
-import { TASKS_GENAI_STABLE, ENGINE_MAX_TOKENS } from '../config.js';
+import { TASKS_GENAI_STABLE, DEFAULT_MAX_TOKENS } from '../config.js';
 import { buildPrompt } from '../prompts.js';
 
 function loadTasksGenai(version) {
@@ -23,13 +23,14 @@ export class TasksBackend {
     this.llm = null;
   }
 
-  async mount(modelDef, modelUrl, { vision = false, audio = false } = {}) {
+  // All options are create-time: changing them requires a remount.
+  async mount(modelDef, modelUrl, { maxTokens = DEFAULT_MAX_TOKENS, vision = false, audio = false, maxNumImages = 0 } = {}) {
     const { FilesetResolver, LlmInference } = await loadTasksGenai(this.sdk);
     const genai = await FilesetResolver.forGenAiTasks(tasksGenaiWasmRoot(this.sdk));
     this.llm = await LlmInference.createFromOptions(genai, {
       baseOptions: { modelAssetPath: modelUrl },
-      maxTokens: ENGINE_MAX_TOKENS,
-      maxNumImages: vision ? 10 : 0,
+      maxTokens,
+      maxNumImages: vision ? maxNumImages : 0,
       supportAudio: !!audio
     });
   }
@@ -38,7 +39,7 @@ export class TasksBackend {
   async resetContext() {}
 
   async send(content, { history = [], caveman = false } = {}, onText) {
-    const prompt = buildPrompt(history, caveman, this.promptFormat);
+    const prompt = await buildPrompt(history, caveman, this.promptFormat);
     let streamed = '';
     const full = await this.llm.generateResponse(prompt, (partial) => {
       if (partial) {

@@ -40,6 +40,8 @@
   background: rgba(255, 255, 255, 0.08);
 }
 .message.user .bubble .chat-image + span { display: block; margin-top: 0.375rem; }
+.message.user .bubble .chat-audio { display: block; max-width: min(16rem, 100%); }
+.message.user .bubble .chat-audio + span { display: block; margin-top: 0.375rem; }
 .message.ai { align-items: stretch; }
 .message.ai .markdown-content { max-width: 100%; }
 
@@ -101,17 +103,21 @@ details.thinking-block div { margin-top: 0.5rem; white-space: pre-wrap; font-fam
   padding: 0.625rem 0.75rem calc(0.625rem + env(safe-area-inset-bottom));
 }
 .composer-inner { max-width: 48rem; margin: 0 auto; }
-#attach-chip {
+#attach-chip, #audio-chip {
   display: none; align-items: center; gap: 0.4375rem;
   font-size: 0.75rem; font-weight: 500;
   background: hsl(var(--secondary)); border: 1px solid hsl(var(--border));
   border-radius: 999px; padding: 0.25rem 0.375rem 0.25rem 0.625rem;
   margin-bottom: 0.5rem; width: fit-content; max-width: 100%;
 }
-#attach-chip.visible { display: inline-flex; }
-#attach-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 12rem; }
-#attach-chip-remove { border: none; background: hsl(var(--muted-foreground) / 0.15); border-radius: 50%; width: 1.125rem; height: 1.125rem; display: flex; align-items: center; justify-content: center; cursor: pointer; color: hsl(var(--muted-foreground)); }
-#attach-chip-remove:hover { background: hsl(var(--destructive)); color: white; }
+#attach-chip.visible, #audio-chip.visible { display: inline-flex; }
+#attach-chip-name, #audio-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 12rem; }
+#attach-chip-remove, #audio-chip-remove { border: none; background: hsl(var(--muted-foreground) / 0.15); border-radius: 50%; width: 1.125rem; height: 1.125rem; display: flex; align-items: center; justify-content: center; cursor: pointer; color: hsl(var(--muted-foreground)); }
+#attach-chip-remove:hover, #audio-chip-remove:hover { background: hsl(var(--destructive)); color: white; }
+
+/* Recording indicator */
+#mic-btn.recording { color: hsl(var(--destructive)); animation: mic-pulse 1.2s ease-in-out infinite; }
+@keyframes mic-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
 .composer-bar {
   display: flex; align-items: flex-end; gap: 0.375rem;

@@ -1,18 +1,28 @@
 // ============================================================
 // Prompt builders for the tasks-genai backend. That runtime keeps no
 // conversation state and applies no chat template, so the full prompt
-// is rebuilt from the message log on every send. Image parts ride as
-// { imageSource } objects; the runtime expands them into the model's
-// image token + vision embeddings.
+// is rebuilt from the message log on every send. Media parts ride as
+// { imageSource } / { audioSource } objects; the runtime expands them
+// into the model's media tokens + encoder embeddings.
 // ============================================================
 import { contentToText, compressToCaveman } from './text.js';
+import { dataUrlToMonoAudioBuffer } from './audio.js';
 
-export function buildPrompt(log, useCaveman, format) {
+export async function buildPrompt(log, useCaveman, format) {
   return format === 'gemma3' ? buildGemma3Prompt(log, useCaveman) : buildGemma4Prompt(log, useCaveman);
 }
 
+async function pushMediaPart(parts, part, padding) {
+  if (part.type === 'image' && part.dataUrl) {
+    parts.push(padding, { imageSource: part.dataUrl }, padding);
+  } else if (part.type === 'audio' && part.dataUrl) {
+    const buffer = await dataUrlToMonoAudioBuffer(part.dataUrl);
+    parts.push(padding, { audioSource: buffer }, padding);
+  }
+}
+
 // Gemma 4 format: <|turn>role ... <turn|>
-function buildGemma4Prompt(log, useCaveman) {
+async function buildGemma4Prompt(log, useCaveman) {
   const parts = [];
   const cx = (t) => (useCaveman ? compressToCaveman(t) : t);
   const sys = log.find(m => m.role === 'system');
@@ -27,11 +37,8 @@ function buildGemma4Prompt(log, useCaveman) {
       parts.push(cx(m.content));
     } else if (Array.isArray(m.content)) {
       for (const part of m.content) {
-        if (part.type === 'text') {
-          parts.push(cx(part.text));
-        } else if (part.type === 'image' && part.dataUrl) {
-          parts.push('\n\n', { imageSource: part.dataUrl }, '\n\n');
-        }
+        if (part.type === 'text') parts.push(cx(part.text));
+        else await pushMediaPart(parts, part, '\n\n');
       }
     }
     parts.push('<turn|>\n');
@@ -42,7 +49,7 @@ function buildGemma4Prompt(log, useCaveman) {
 
 // Classic Gemma format (<start_of_turn>) used by Gemma-3n. Gemma-3n has no
 // system turn, so the system preface is merged into the first user turn.
-function buildGemma3Prompt(log, useCaveman) {
+async function buildGemma3Prompt(log, useCaveman) {
   const parts = [];
   const cx = (t) => (useCaveman ? compressToCaveman(t) : t);
   const sysMsg = log.find(m => m.role === 'system');
@@ -60,11 +67,8 @@ function buildGemma3Prompt(log, useCaveman) {
       parts.push(cx(m.content));
     } else if (Array.isArray(m.content)) {
       for (const part of m.content) {
-        if (part.type === 'text') {
-          parts.push(cx(part.text));
-        } else if (part.type === 'image' && part.dataUrl) {
-          parts.push('\n', { imageSource: part.dataUrl }, '\n');
-        }
+        if (part.type === 'text') parts.push(cx(part.text));
+        else await pushMediaPart(parts, part, '\n');
       }
     }
     parts.push('<end_of_turn>\n');

@@ -6,7 +6,7 @@
 // messages cross the JS->WASM boundary as JSON.
 // ============================================================
 import { Engine } from 'https://cdn.jsdelivr.net/npm/@litert-lm/core/+esm';
-import { SYSTEM_PREFACE, ENGINE_MAX_TOKENS } from '../config.js';
+import { SYSTEM_PREFACE, DEFAULT_MAX_TOKENS } from '../config.js';
 import { compressToCaveman } from '../text.js';
 import { dataUrlToBase64 } from '../image.js';
 
@@ -18,12 +18,18 @@ export class LitertBackend {
     this.modalities = { vision: false, audio: false };
   }
 
-  async mount(modelDef, modelUrl, { vision = false, audio = false } = {}) {
+  async mount(modelDef, modelUrl, { maxTokens = DEFAULT_MAX_TOKENS, vision = false, audio = false } = {}) {
     this.modalities = { vision, audio };
     this.engine = await Engine.create({
       model: modelUrl,
-      mainExecutorSettings: { maxNumTokens: ENGINE_MAX_TOKENS }
+      mainExecutorSettings: { maxNumTokens: maxTokens }
     });
+  }
+
+  // Modality flags are session-scoped: they can change after mount and take
+  // effect on the next resetContext(), without remounting the engine.
+  updateModalities({ vision, audio }) {
+    this.modalities = { vision, audio };
   }
 
   sessionConfig() {
@@ -61,6 +67,8 @@ export class LitertBackend {
           parts.push({ type: 'text', text: caveman ? compressToCaveman(part.text) : part.text });
         } else if (part.type === 'image' && part.dataUrl) {
           parts.push({ type: 'image', blob: dataUrlToBase64(part.dataUrl) });
+        } else if (part.type === 'audio' && part.dataUrl) {
+          parts.push({ type: 'audio', blob: dataUrlToBase64(part.dataUrl) });
         }
       }
       return parts;

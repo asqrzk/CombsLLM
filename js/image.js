@@ -16,7 +16,7 @@ export function validateImageFile(file) {
   return null;
 }
 
-function blobToDataUrl(blob) {
+export function blobToDataUrl(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);

@@ -4,17 +4,19 @@
 // Backends, storage, rendering and pipelines live in js/ modules.
 // ============================================================
 import {
-  SYSTEM_PREFACE, DB_NAME,
+  SYSTEM_PREFACE, DB_NAME, DEFAULT_MAX_TOKENS,
   getModelDef, getModelName, modelDownloadUrl
 } from './js/config.js';
 import { state } from './js/state.js';
 import {
   app, chatBox, inputField, sendBtn, loadBtn, attachBtn, imageUpload,
-  attachChip, attachChipName, attachChipRemove, compressBtn, clearCacheBtn,
+  attachChip, attachChipName, attachChipRemove, micBtn, audioChip, audioChipName, audioChipRemove,
+  compressBtn, clearCacheBtn,
   contextLimitInput, cavemanToggle, reasoningToggle, visionToggle, audioToggle,
   menuBtn, sidebarBackdrop, sidebarCloseBtn, newChatBtn, chatListEl, headerTitle,
   engineStatus, engineStatusText, toggleConsoleBtn, consolePanel,
-  sidebarStorageTxt, modelSelect, hfTokenInput,
+  sidebarStorageTxt, hfTokenInput,
+  runtimeSelect, maxTokensInput, maxImagesInput, presetSelect,
   jsHeapTxt, kvCacheTxt, contextProgress, diskUsageTxt,
   confirmModal, storageModal, storageModalBody,
   storageModalClose, storageModalDone, storageModalPurge
@@ -26,23 +28,38 @@ import {
   syncEmptyState, scrollChatToBottom
 } from './js/chat-ui.js';
 import { escapeHtml, formatBytes, deriveTitle, estimateMessageTokens } from './js/text.js';
-import { validateImageFile, processImageFile } from './js/image.js';
+import { validateImageFile, processImageFile, blobToDataUrl } from './js/image.js';
+import { isRecording, startAudioRecording, stopAudioRecording } from './js/audio.js';
 import {
   fetchAndCacheModel, getCacheItems, deleteCacheItem
 } from './js/model-cache.js';
 import { createBackend } from './js/backends/index.js';
+import { loadPresets } from './js/presets.js';
+import {
+  initModelPicker, getSelectedModelId, setSelectedModelId,
+  setModelPickerDisabled, refreshModelCacheInfo
+} from './js/model-picker.js';
 
 // ============================================================
 // MODEL SELECT HELPERS
 // ============================================================
 function getSelectedModel() {
-  return modelSelect.value;
+  return getSelectedModelId();
 }
 
 function syncModelSelect(modelId) {
-  if (modelId && modelSelect.value !== modelId) {
-    modelSelect.value = modelId;
-  }
+  setSelectedModelId(modelId);
+}
+
+// Read the current console configuration as a mount-time options object.
+function currentEngineConfig() {
+  return {
+    runtime: runtimeSelect.value,
+    maxTokens: parseInt(maxTokensInput.value) || DEFAULT_MAX_TOKENS,
+    maxNumImages: parseInt(maxImagesInput.value) || 0,
+    vision: visionToggle.checked,
+    audio: audioToggle.checked
+  };
 }
 
 // ============================================================
@@ -299,6 +316,7 @@ async function renderStorageList() {
         toast('Failed to remove model: ' + e.message, 'error');
       }
       await renderStorageList();
+      await refreshModelCacheInfo();
       await updateMetricsDashboard();
     });
     storageModalBody.appendChild(row);
@@ -366,12 +384,13 @@ async function disposeBackend() {
 async function offloadEngine() {
   if (!state.backend) return;
   loadBtn.disabled = true;
-  modelSelect.disabled = false;
+  setModelPickerDisabled(false);
   setEngineStatus('', 'Idle');
   await disposeBackend();
   state.currentModel = null;
   inputField.disabled = true;
   attachBtn.disabled = true;
+  micBtn.disabled = true;
   compressBtn.disabled = true;
   inputField.placeholder = 'Initialize the engine to begin…';
   loadBtn.textContent = 'Initialize engine';
@@ -382,7 +401,7 @@ async function offloadEngine() {
 
 async function initModel() {
   loadBtn.disabled = true;
-  modelSelect.disabled = true;
+  setModelPickerDisabled(true);
   loadBtn.textContent = 'Initializing…';
   setEngineStatus('loading', 'Loading');
   const modelName = getSelectedModel();
@@ -392,7 +411,7 @@ async function initModel() {
     setEngineStatus('', 'Error');
     loadBtn.textContent = 'Initialize engine';
     loadBtn.disabled = false;
-    modelSelect.disabled = false;
+    setModelPickerDisabled(false);
     return;
   }
 
@@ -402,11 +421,9 @@ async function initModel() {
     state.modelBlobUrl = localBlobUrl;
 
     toast(`Mounting ${modelDef.label}…`, 'info', 2800);
-    state.backend = createBackend(modelDef);
-    await state.backend.mount(modelDef, localBlobUrl, {
-      vision: visionToggle.checked,
-      audio: audioToggle.checked
-    });
+    const config = currentEngineConfig();
+    state.backend = createBackend(config.runtime, modelDef);
+    await state.backend.mount(modelDef, localBlobUrl, config);
 
     state.currentModel = modelName;
     state.activeChatModel = modelName;
@@ -421,12 +438,13 @@ async function initModel() {
 
     inputField.disabled = false;
     attachBtn.disabled = false;
+    micBtn.disabled = false;
     compressBtn.disabled = false;
     inputField.placeholder = 'Message CombsLLM…';
     setEngineStatus('ready', 'Ready');
     loadBtn.textContent = 'Reinitialize';
     loadBtn.disabled = false;
-    modelSelect.disabled = false;
+    setModelPickerDisabled(false);
 
     toast('Engine ready — WebGPU inference running natively.', 'success');
     // On mobile, tuck the console away so the chat is front and center.
@@ -436,6 +454,7 @@ async function initModel() {
     }
     syncSendState();
     inputField.focus();
+    await refreshModelCacheInfo();
     await updateMetricsDashboard();
     await persistActiveChat();
   } catch (error) {
@@ -444,7 +463,7 @@ async function initModel() {
     setEngineStatus('', 'Error');
     loadBtn.textContent = 'Initialize engine';
     loadBtn.disabled = false;
-    modelSelect.disabled = false;
+    setModelPickerDisabled(false);
   }
 }
 
@@ -452,14 +471,14 @@ async function initModel() {
 // MESSAGING
 // ============================================================
 function syncSendState() {
-  const hasContent = inputField.value.trim().length > 0 || imageUpload.files.length > 0;
+  const hasContent = inputField.value.trim().length > 0 || imageUpload.files.length > 0 || !!pendingAudio;
   sendBtn.disabled = !state.backend || state.generating || !hasContent;
 }
 
 async function sendMessage() {
   const text = inputField.value.trim();
   const file = imageUpload.files[0];
-  if ((!text && !file) || !state.backend || state.generating) return;
+  if ((!text && !file && !pendingAudio) || !state.backend || state.generating) return;
 
   state.generating = true;
   syncSendState();
@@ -502,16 +521,21 @@ async function sendMessage() {
   const contentStructure = [];
   if (text) contentStructure.push({ type: 'text', text });
   if (imagePart) contentStructure.push(imagePart);
+  if (pendingAudio) {
+    contentStructure.push({ type: 'audio', dataUrl: pendingAudio.dataUrl, duration: pendingAudio.duration });
+  }
 
-  // Single text part stays a plain string; anything with an image becomes a part array.
+  // Single text part stays a plain string; anything with media becomes a part array.
   const logContent = (contentStructure.length === 1 && contentStructure[0].type === 'text')
     ? text
     : contentStructure;
 
-  addUserBubble(text, imagePart?.dataUrl || null);
+  addUserBubble(text, { image: imagePart?.dataUrl || null, audio: pendingAudio?.dataUrl || null });
   state.activeMessagesLog.push({ role: 'user', content: logContent });
   imageUpload.value = '';
   attachChip.classList.remove('visible');
+  pendingAudio = null;
+  audioChip.classList.remove('visible');
 
   await persistActiveChat();
   await updateMetricsDashboard();
@@ -520,13 +544,15 @@ async function sendMessage() {
   const { content, metrics } = addAiMessageShell(getModelName(state.activeChatModel));
   let generated = '';
   let renderQueued = false;
+  let streamClosed = false;
   const startedAt = performance.now();
 
   const scheduleRender = () => {
-    if (renderQueued) return;
+    if (renderQueued || streamClosed) return;
     renderQueued = true;
     requestAnimationFrame(() => {
       renderQueued = false;
+      if (streamClosed) return;
       renderMarkdownInto(content, generated, { streaming: true });
       scrollChatToBottom();
     });
@@ -546,6 +572,9 @@ async function sendMessage() {
     toast(`Generation interrupted: ${error.message}`, 'error', 5000);
   }
 
+  // Close the stream before the final render so a queued rAF can't
+  // re-render with the streaming cursor afterwards.
+  streamClosed = true;
   renderMarkdownInto(content, generated, { streaming: false });
 
   const secs = (performance.now() - startedAt) / 1000;
@@ -622,6 +651,51 @@ attachChipRemove.addEventListener('click', () => {
   syncSendState();
 });
 
+// ---- Voice recording ----
+let pendingAudio = null; // { dataUrl, duration }
+let recordingCapTimer = null;
+const MAX_RECORDING_MS = 120000;
+
+async function stopRecording() {
+  if (recordingCapTimer) { clearTimeout(recordingCapTimer); recordingCapTimer = null; }
+  try {
+    const { blob, duration } = await stopAudioRecording();
+    pendingAudio = { dataUrl: await blobToDataUrl(blob), duration };
+    audioChipName.textContent = `Voice message · ${duration.toFixed(1)}s`;
+    audioChip.classList.add('visible');
+  } catch (e) {
+    toast('Recording failed: ' + e.message, 'error');
+  }
+  micBtn.classList.remove('recording');
+  syncSendState();
+}
+
+micBtn.addEventListener('click', async () => {
+  if (!state.backend) return;
+  if (isRecording()) {
+    await stopRecording();
+    return;
+  }
+  if (!audioToggle.checked) {
+    toast('Audio is off. Enable the Audio toggle in the engine console, then reinitialize the engine to use voice.', 'warning', 5200);
+    return;
+  }
+  try {
+    await startAudioRecording();
+    micBtn.classList.add('recording');
+    recordingCapTimer = setTimeout(() => { if (isRecording()) stopRecording(); }, MAX_RECORDING_MS);
+    toast('Recording… tap the mic again to stop.', 'info', 2500);
+  } catch (e) {
+    toast('Microphone unavailable: ' + e.message, 'error', 4500);
+  }
+});
+
+audioChipRemove.addEventListener('click', () => {
+  pendingAudio = null;
+  audioChip.classList.remove('visible');
+  syncSendState();
+});
+
 // ============================================================
 // GLOBAL BINDINGS & INIT
 // ============================================================
@@ -682,11 +756,27 @@ reasoningToggle.addEventListener('change', () => {
   renderAllMessages();
 });
 
-// Modality toggles: persisted, applied at next engine (re)initialization.
-function onModalityToggle(name, input) {
+// Modality toggles: persisted. On LiteRT-LM they are session-scoped and apply
+// live via resetContext; on tasks-genai they are create-time and need a remount.
+async function onModalityToggle(name, input) {
   localStorage.setItem(`combsllm.${name}`, input.checked ? '1' : '0');
-  if (state.backend) {
-    toast(`${name === 'vision' ? 'Vision' : 'Audio'} ${input.checked ? 'enabled' : 'disabled'} — reinitialize the engine to apply.`, 'info', 3600);
+  presetSelect.value = '';
+  if (!state.backend) return;
+  const label = name === 'vision' ? 'Vision' : 'Audio';
+  if (state.generating) {
+    toast(`${label} ${input.checked ? 'enabled' : 'disabled'} — applies after the current reply.`, 'info', 3200);
+    return;
+  }
+  if (state.backend.kind === 'litert') {
+    state.backend.updateModalities({ vision: visionToggle.checked, audio: audioToggle.checked });
+    try {
+      await state.backend.resetContext(state.activeMessagesLog, { caveman: cavemanToggle.checked });
+      toast(`${label} ${input.checked ? 'enabled' : 'disabled'} — applied to the live session.`, 'success', 2800);
+    } catch (e) {
+      toast('Session update failed: ' + e.message, 'error');
+    }
+  } else {
+    toast(`${label} ${input.checked ? 'enabled' : 'disabled'} — reinitialize the engine to apply.`, 'info', 3600);
   }
 }
 visionToggle.addEventListener('change', () => onModalityToggle('vision', visionToggle));
@@ -694,10 +784,43 @@ audioToggle.addEventListener('change', () => onModalityToggle('audio', audioTogg
 
 hfTokenInput.addEventListener('change', (e) => {
   localStorage.setItem('combsllm.hfToken', e.target.value.trim());
-  if (e.target.value.trim()) toast('HF token saved locally — gated repos will use it on next download.', 'success', 2800);
 });
 
-modelSelect.addEventListener('change', async () => {
+// Create-time config inputs: used on the next initialization.
+function onCreateTimeConfigChange() {
+  presetSelect.value = '';
+  if (state.backend) toast('Runtime/token/image settings apply on reinitialize.', 'info', 3000);
+}
+runtimeSelect.addEventListener('change', onCreateTimeConfigChange);
+maxTokensInput.addEventListener('change', onCreateTimeConfigChange);
+maxImagesInput.addEventListener('change', onCreateTimeConfigChange);
+
+// Presets: populate the controls from presets.json; initialization stays manual.
+function applyPreset(preset) {
+  syncModelSelect(preset.model);
+  runtimeSelect.value = preset.runtime;
+  maxTokensInput.value = preset.maxTokens ?? DEFAULT_MAX_TOKENS;
+  maxImagesInput.value = preset.maxNumImages ?? 0;
+  visionToggle.checked = !!preset.vision;
+  audioToggle.checked = !!preset.audio;
+  cavemanToggle.checked = preset.caveman !== false;
+  localStorage.setItem('combsllm.vision', visionToggle.checked ? '1' : '0');
+  localStorage.setItem('combsllm.audio', audioToggle.checked ? '1' : '0');
+  toast(`Preset "${preset.name}" loaded — initialize the engine to run it.`, 'success', 3600);
+}
+
+presetSelect.addEventListener('change', async () => {
+  const idx = parseInt(presetSelect.value);
+  if (Number.isNaN(idx)) return;
+  const presets = await loadPresets();
+  if (presets[idx]) applyPreset(presets[idx]);
+});
+
+async function onModelPicked(id) {
+  // The registry entry suggests a default runtime; the user can override it.
+  const def = getModelDef(id);
+  if (def) runtimeSelect.value = def.runtime;
+  presetSelect.value = '';
   if (!state.backend) return;
   if (state.generating) {
     toast('Wait for the current reply to finish.', 'warning', 2600);
@@ -705,7 +828,7 @@ modelSelect.addEventListener('change', async () => {
     return;
   }
   await initModel();
-});
+}
 
 (async function init() {
   if (localStorage.getItem('combsllm.consoleCollapsed') === '1') {
@@ -715,7 +838,22 @@ modelSelect.addEventListener('change', async () => {
 
   visionToggle.checked = localStorage.getItem('combsllm.vision') === '1';
   audioToggle.checked = localStorage.getItem('combsllm.audio') === '1';
-  hfTokenInput.value = localStorage.getItem('combsllm.hfToken') || '';
+
+  // Model picker owns selection state and the HF token editor.
+  initModelPicker({ onChange: onModelPicked });
+  await refreshModelCacheInfo();
+
+  // Sync the runtime dropdown to the selected model's suggested default and
+  // populate the preset picker.
+  const initialDef = getModelDef(getSelectedModel());
+  if (initialDef) runtimeSelect.value = initialDef.runtime;
+  const presets = await loadPresets();
+  presets.forEach((p, i) => {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = p.name;
+    presetSelect.appendChild(opt);
+  });
 
   try {
     await refreshSidebar();
