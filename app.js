@@ -14,9 +14,10 @@ import {
   compressBtn, clearCacheBtn,
   contextLimitInput, cavemanToggle, reasoningToggle, visionToggle, audioToggle,
   menuBtn, sidebarBackdrop, sidebarCloseBtn, newChatBtn, chatListEl, headerTitle,
-  engineStatus, engineStatusText, toggleConsoleBtn, consolePanel,
+  engineStatus, engineStatusText, toggleConsoleBtn, consolePanel, agentsSettings,
   sidebarStorageTxt, hfTokenInput,
   runtimeSelect, maxTokensInput, maxImagesInput, presetSelect,
+  acceleratorSelect,
   jsHeapTxt, kvCacheTxt, contextProgress, diskUsageTxt,
   confirmModal, storageModal, storageModalBody,
   storageModalClose, storageModalDone, storageModalPurge
@@ -39,6 +40,10 @@ import {
   initModelPicker, getSelectedModelId, setSelectedModelId,
   setModelPickerDisabled, refreshModelCacheInfo
 } from './js/model-picker.js';
+import { initSystemInfo, isCpuForced } from './js/system-info.js';
+import { initTerminal } from './js/terminal.js';
+import { initMcp, mcpManager, onServersChanged } from './js/mcp.js';
+import { initAgents, exitAgentsView, resetAgentsForm, renderRunList } from './js/agents.js';
 
 // ============================================================
 // MODEL SELECT HELPERS
@@ -58,7 +63,9 @@ function currentEngineConfig() {
     maxTokens: parseInt(maxTokensInput.value) || DEFAULT_MAX_TOKENS,
     maxNumImages: parseInt(maxImagesInput.value) || 0,
     vision: visionToggle.checked,
-    audio: audioToggle.checked
+    audio: audioToggle.checked,
+    forceCpu: isCpuForced(),
+    accelerator: acceleratorSelect.value
   };
 }
 
@@ -89,6 +96,10 @@ async function persistActiveChat() {
 }
 
 async function refreshSidebar() {
+  if (state.view === 'agents') {
+    await renderRunList(chatListEl);
+    return;
+  }
   let chats = [];
   try { chats = await idbGetAll(); } catch (e) { console.warn(e); }
   chatListEl.innerHTML = '';
@@ -138,6 +149,7 @@ async function refreshSidebar() {
 
 async function startNewChat(focusInput = true) {
   if (state.generating) { toast('Wait for the current reply to finish.', 'warning', 2600); return; }
+  exitAgentsView();
   state.activeChatId = null;
   state.activeChatModel = null;
   state.activeMessagesLog = [{ role: 'system', content: SYSTEM_PREFACE }];
@@ -156,8 +168,9 @@ async function startNewChat(focusInput = true) {
 }
 
 async function openChat(id) {
-  if (id === state.activeChatId) { closeMobileSidebar(); return; }
+  if (id === state.activeChatId && state.view === 'chat') { closeMobileSidebar(); return; }
   if (state.generating) { toast('Wait for the current reply to finish.', 'warning', 2600); return; }
+  exitAgentsView();
   state.isRestoring = true;
   let chat;
   try { chat = await idbGet(id); } catch (e) { chat = null; }
@@ -169,6 +182,9 @@ async function openChat(id) {
   if (state.activeChatModel) syncModelSelect(state.activeChatModel);
   localStorage.setItem('combsllm.activeChatId', id);
   renderAllMessages();
+  headerTitle.textContent = state.activeMessagesLog.some(m => m.role === 'user')
+    ? deriveTitle(state.activeMessagesLog)
+    : 'New chat';
   await refreshSidebar();
   state.isRestoring = false;
   closeMobileSidebar();
@@ -210,6 +226,13 @@ sidebarBackdrop.addEventListener('click', closeMobileSidebar);
 desktopMQ.addEventListener('change', () => app.classList.remove('sidebar-open', 'sidebar-collapsed'));
 
 toggleConsoleBtn.addEventListener('click', () => {
+  // On the agents page the engine console is hidden — the button toggles the
+  // run's "Prompts & timing" panel instead.
+  if (state.view === 'agents') {
+    agentsSettings.open = !agentsSettings.open;
+    toggleConsoleBtn.classList.toggle('active', agentsSettings.open);
+    return;
+  }
   const collapsed = consolePanel.classList.toggle('collapsed');
   toggleConsoleBtn.classList.toggle('active', !collapsed);
   localStorage.setItem('combsllm.consoleCollapsed', collapsed ? '1' : '0');
@@ -383,6 +406,10 @@ async function disposeBackend() {
 
 async function offloadEngine() {
   if (!state.backend) return;
+  if (state.agentRunning) {
+    toast('Stop the agent run before offloading the engine.', 'warning', 3600);
+    return;
+  }
   loadBtn.disabled = true;
   setModelPickerDisabled(false);
   setEngineStatus('', 'Idle');
@@ -400,6 +427,10 @@ async function offloadEngine() {
 }
 
 async function initModel() {
+  if (state.agentRunning) {
+    toast('Stop the agent run before reinitializing the engine.', 'warning', 3600);
+    return;
+  }
   loadBtn.disabled = true;
   setModelPickerDisabled(true);
   loadBtn.textContent = 'Initializing…';
@@ -422,7 +453,11 @@ async function initModel() {
 
     toast(`Mounting ${modelDef.label}…`, 'info', 2800);
     const config = currentEngineConfig();
+    if (config.forceCpu && config.runtime === 'tasks') {
+      toast('Force CPU is ignored by tasks-genai — it requires WebGPU.', 'warning', 4200);
+    }
     state.backend = createBackend(config.runtime, modelDef);
+    if (state.backend.kind === 'litert') state.backend.setToolProvider(mcpManager);
     await state.backend.mount(modelDef, localBlobUrl, config);
 
     state.currentModel = modelName;
@@ -479,6 +514,10 @@ async function sendMessage() {
   const text = inputField.value.trim();
   const file = imageUpload.files[0];
   if ((!text && !file && !pendingAudio) || !state.backend || state.generating) return;
+  if (state.agentRunning) {
+    toast('An agent run is in progress — chat is paused until it finishes.', 'warning', 3600);
+    return;
+  }
 
   state.generating = true;
   syncSendState();
@@ -751,7 +790,15 @@ storageModal.addEventListener('click', (e) => {
 sendBtn.addEventListener('click', sendMessage);
 compressBtn.addEventListener('click', executeContextPruning);
 clearCacheBtn.addEventListener('click', openStorageModal);
-newChatBtn.addEventListener('click', () => startNewChat());
+newChatBtn.addEventListener('click', () => {
+  if (state.view === 'agents') resetAgentsForm();
+  else startNewChat();
+});
+
+// Agents view dispatches these when the view flips or runs are saved/deleted/
+// validated — keep the sidebar in sync.
+window.addEventListener('combs:view-changed', () => refreshSidebar());
+window.addEventListener('combs:agent-runs-changed', () => refreshSidebar());
 reasoningToggle.addEventListener('change', () => {
   renderAllMessages();
 });
@@ -792,6 +839,7 @@ function onCreateTimeConfigChange() {
   if (state.backend) toast('Runtime/token/image settings apply on reinitialize.', 'info', 3000);
 }
 runtimeSelect.addEventListener('change', onCreateTimeConfigChange);
+acceleratorSelect.addEventListener('change', onCreateTimeConfigChange);
 maxTokensInput.addEventListener('change', onCreateTimeConfigChange);
 maxImagesInput.addEventListener('change', onCreateTimeConfigChange);
 
@@ -804,6 +852,7 @@ function applyPreset(preset) {
   visionToggle.checked = !!preset.vision;
   audioToggle.checked = !!preset.audio;
   cavemanToggle.checked = preset.caveman !== false;
+  acceleratorSelect.value = preset.accelerator || 'webgpu';
   localStorage.setItem('combsllm.vision', visionToggle.checked ? '1' : '0');
   localStorage.setItem('combsllm.audio', audioToggle.checked ? '1' : '0');
   toast(`Preset "${preset.name}" loaded — initialize the engine to run it.`, 'success', 3600);
@@ -842,6 +891,23 @@ async function onModelPicked(id) {
   // Model picker owns selection state and the HF token editor.
   initModelPicker({ onChange: onModelPicked });
   await refreshModelCacheInfo();
+
+  initSystemInfo();
+  initTerminal();
+  await initMcp();
+  initAgents();
+
+  // Connecting/disconnecting MCP servers updates the live LiteRT-LM session
+  // (tools are bound at conversation level, no engine remount needed).
+  onServersChanged(async () => {
+    if (state.backend?.kind === 'litert' && !state.generating) {
+      try {
+        await state.backend.resetContext(state.activeMessagesLog, { caveman: cavemanToggle.checked });
+      } catch (e) {
+        console.warn('Tool context refresh failed:', e);
+      }
+    }
+  });
 
   // Sync the runtime dropdown to the selected model's suggested default and
   // populate the preset picker.

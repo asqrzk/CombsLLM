@@ -38,5 +38,16 @@
     "vision": true,
     "audio": true,
     "caveman": true
+  },
+  {
+    "name": "MobileNetV4 Small · LiteRT.js · WebGPU",
+    "model": "mobilenetv4-conv-small-224-f32",
+    "runtime": "litertjs",
+    "accelerator": "webgpu",
+    "maxTokens": 8192,
+    "maxNumImages": 0,
+    "vision": true,
+    "audio": false,
+    "caveman": false
   }
 ]

@@ -17,6 +17,7 @@ export const IMAGE_MIME_WHITELIST = new Set(['image/png', 'image/jpeg', 'image/w
 // IndexedDB chat store.
 export const DB_NAME = 'combsllm-chats';
 export const DB_STORE = 'chats';
+export const AGENT_RUNS_STORE = 'agent-runs';
 
 // Canonical media-pipeline stages used to describe a model's architecture.
 // Every registry entry fills the same vocabulary so details render
@@ -208,6 +209,49 @@ export const MODELS = {
       deTokenizer: 'Bundled Internal',
       vaeDecoder: 'None (Text-out only)',
       kvCaching: 'Native Stateful (Memory-mapped cache)'
+    }
+  },
+  // Classic single-graph .tflite models (LiteRT.js runtime). No prompt
+  // format — these take tensors, not chat messages. labelsFile resolves
+  // against the same repo.
+  'mobilenetv4-conv-small-224-f32': {
+    label: 'MobileNetV4 Conv Small',
+    repo: 'byoussef/MobileNetV4_Conv_Small_TFLite_224',
+    file: 'mobilenetv4_conv_small.e2400_r224_in1k_float32.tflite',
+    labelsFile: 'imagenet_classes.txt',
+    runtime: 'litertjs',
+    tags: ['vision', 'classification', 'tflite'],
+    size: '~15 MB',
+    architecture: {
+      tokenizer: 'None (Tensor-in)',
+      patchers: '224×224 Resize + TF Normalization ((x−127.5)/127.5)',
+      embedders: 'RGB Pixel Tensor [1,224,224,3] float32',
+      encoders: 'MobileNetV4 Conv Small CNN',
+      decoder: 'Global Pool + Linear Classifier',
+      outputHead: '1000-way ImageNet Logits',
+      deTokenizer: 'None (Argmax + Labels File)',
+      vaeDecoder: 'None',
+      kvCaching: 'None (Single-shot inference)'
+    }
+  },
+  'mobilenetv4-conv-medium-224-f32': {
+    label: 'MobileNetV4 Conv Medium',
+    repo: 'byoussef/MobileNetV4_Conv_Medium_TFLite_224',
+    file: 'mobilenetv4_conv_medium.e500_r224_in1k_float32.tflite',
+    labelsFile: 'imagenet_classes.txt',
+    runtime: 'litertjs',
+    tags: ['vision', 'classification', 'tflite'],
+    size: '~39 MB',
+    architecture: {
+      tokenizer: 'None (Tensor-in)',
+      patchers: '224×224 Resize + TF Normalization ((x−127.5)/127.5)',
+      embedders: 'RGB Pixel Tensor [1,224,224,3] float32',
+      encoders: 'MobileNetV4 Conv Medium CNN',
+      decoder: 'Global Pool + Linear Classifier',
+      outputHead: '1000-way ImageNet Logits',
+      deTokenizer: 'None (Argmax + Labels File)',
+      vaeDecoder: 'None',
+      kvCaching: 'None (Single-shot inference)'
     }
   }
 };

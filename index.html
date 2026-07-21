@@ -34,7 +34,7 @@
     <div class="sidebar-new">
       <button id="new-chat-btn" class="btn btn-outline">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-        New chat
+        <span id="new-chat-btn-label">New chat</span>
       </button>
     </div>
     <nav id="chat-list" aria-label="Saved chats"></nav>
@@ -57,6 +57,21 @@
         <span class="engine-status-dot"></span>
         <span class="engine-status-text" id="engine-status-text">Idle</span>
       </div>
+      <button id="sysinfo-btn" class="btn btn-ghost btn-icon" aria-label="System & browser info" title="System & browser info">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+      </button>
+      <button id="terminal-btn" class="btn btn-ghost btn-icon" aria-label="Terminal" title="Terminal">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
+        <span id="terminal-badge" class="terminal-badge hidden"></span>
+      </button>
+      <button id="mcp-btn" class="btn btn-ghost btn-icon" aria-label="MCP servers" title="MCP servers">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        <span id="mcp-badge" class="terminal-badge mcp-badge hidden"></span>
+      </button>
+      <button id="agents-btn" class="btn btn-ghost btn-icon" aria-label="Agent orchestrator" title="Agent orchestrator">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="10" x="3" y="11" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" x2="8" y1="16" y2="16"/><line x1="16" x2="16" y1="16" y2="16"/></svg>
+        <span id="agents-badge" class="terminal-badge agents-badge hidden"></span>
+      </button>
       <button id="toggle-console-btn" class="btn btn-ghost btn-icon active" aria-label="Toggle engine console" title="Engine console">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg>
       </button>
@@ -102,6 +117,15 @@
               <select id="runtime-select" class="input">
                 <option value="litert">LiteRT-LM</option>
                 <option value="tasks">MediaPipe tasks-genai</option>
+                <option value="litertjs">LiteRT.js (.tflite)</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label for="accelerator-select" title="LiteRT.js compile target">Accelerator</label>
+              <select id="accelerator-select" class="input">
+                <option value="webgpu">WebGPU</option>
+                <option value="webnn">WebNN (JSPI)</option>
+                <option value="wasm">WASM (CPU)</option>
               </select>
             </div>
             <div class="field-group">
@@ -120,7 +144,7 @@
             <label class="switch-label" title="Enable audio input · live per session on LiteRT-LM, reinitialize on tasks-genai"><input type="checkbox" id="audio-toggle"> Audio</label>
           </div>
           <div class="panel-note">
-            Runtime, max tokens &amp; max images apply on initialize. Vision/Audio apply live per session on LiteRT-LM; on tasks-genai they require reinitialize. Any model × any runtime is allowed — incompatible combinations will fail at mount or send time.
+            Runtime, max tokens &amp; max images apply on initialize. Vision/Audio apply live per session on LiteRT-LM; on tasks-genai they require reinitialize. The accelerator select applies to LiteRT.js only (WebNN loads with JSPI enabled). Any model × any runtime is allowed — incompatible combinations will fail at mount or send time.
           </div>
         </div>
         </div>
@@ -139,7 +163,7 @@
             <div id="hf-token-row" class="hf-token-row hidden">
               <input type="password" id="hf-token" class="input" placeholder="HF access token (gated repos)" autocomplete="off">
               <button id="hf-token-eye" class="btn btn-ghost btn-icon btn-sm" type="button" aria-label="Show or hide token">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-3.5 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
               <button id="hf-token-save" class="btn btn-primary btn-sm" type="button">Save</button>
             </div>
@@ -203,6 +227,111 @@
         <div class="composer-hint">Enter to send · Shift + Enter for a new line · Images: PNG/JPEG/WebP ≤ 2 MB · Chats auto-save to this browser</div>
       </div>
     </div>
+
+    <!-- Agent orchestrator page -->
+    <section id="agents-page" class="hidden" aria-label="Agent orchestrator">
+      <div class="agents-page-inner">
+      <div class="agents-config">
+        <div class="agents-config-row">
+          <input type="text" id="agents-task" class="input" placeholder="Task for the agents — e.g. find who won the world cup yesterday">
+          <button type="button" id="agents-start" class="btn btn-primary btn-sm">Start run</button>
+          <button type="button" id="agents-stop" class="btn btn-destructive btn-sm" disabled>Stop</button>
+        </div>
+        <details class="agents-settings" id="agents-settings" open>
+          <summary>Prompts &amp; timing</summary>
+          <div class="agents-settings-grid">
+            <label class="agents-field">Controller prompt
+              <textarea id="agents-controller-prompt" class="agents-prompt" spellcheck="false"></textarea>
+            </label>
+            <label class="agents-field">Worker prompt
+              <textarea id="agents-worker-prompt" class="agents-prompt" spellcheck="false"></textarea>
+            </label>
+            <div class="agents-nums">
+              <label class="field-group">Controller check (s)
+                <input type="number" id="agents-controller-interval" class="input" value="30" min="2" max="120">
+              </label>
+              <label class="field-group">Worker check (s)
+                <input type="number" id="agents-worker-interval" class="input" value="10" min="2" max="120">
+              </label>
+              <label class="field-group">Max run (min)
+                <input type="number" id="agents-max-minutes" class="input" value="30" min="1" max="180">
+              </label>
+              <label class="field-group">Turn cap (s)
+                <input type="number" id="agents-turn-cap" class="input" value="40" min="5" max="300">
+              </label>
+              <label class="field-group">Stop phrase
+                <input type="text" id="agents-stop-phrase" class="input" value="COMBS YIPPEE">
+              </label>
+            </div>
+          </div>
+        </details>
+      </div>
+      <div class="agents-status">
+        <span id="agents-status-text" class="agents-status-text">Idle</span>
+        <span id="agents-elapsed" class="agents-elapsed">0:00</span>
+        <span id="agents-stats" class="agents-stats">turns C:0 · W:0 · tools:0</span>
+        <span class="spacer"></span>
+        <label class="agents-validated-label" title="Mark this run as a successful one">
+          <input type="checkbox" id="agents-validated" disabled> Validated
+        </label>
+        <button type="button" id="agents-export" class="btn btn-outline btn-sm" disabled>Export run</button>
+      </div>
+      <div class="agents-windows">
+        <div class="agents-window">
+          <div class="agents-window-title">Controller</div>
+          <div id="agents-controller-log" class="agents-log"></div>
+        </div>
+        <div class="agents-window">
+          <div class="agents-window-title">Worker</div>
+          <div id="agents-worker-log" class="agents-log"></div>
+        </div>
+      </div>
+      <div class="spectators">
+        <div class="spectators-head">
+          <span class="spectators-title">Spectators</span>
+          <span class="spectators-sub">random check-ins every 1–2 min</span>
+          <span class="spacer"></span>
+          <label class="spectators-toggle">
+            <input type="checkbox" id="spectators-enabled" checked>
+            <span>enabled</span>
+          </label>
+        </div>
+        <div class="spectators-grid">
+          <div class="agents-window spectator spectator-a">
+            <div class="agents-window-title">
+              <span class="spectator-dot" id="spec-a-dot"></span>
+              <span>Critic · Performance</span>
+              <span class="spacer"></span>
+              <span class="spectator-chip" id="spec-a-count">0 turns</span>
+              <span class="spectator-chip spectator-chip-next" id="spec-a-next">--:--</span>
+            </div>
+            <div id="spec-a-log" class="agents-log spectator-log"></div>
+          </div>
+          <div class="agents-window spectator spectator-scout">
+            <div class="agents-window-title">
+              <span class="spectator-dot" id="spec-scout-dot"></span>
+              <span>Scout · MCP vision</span>
+              <span class="spacer"></span>
+              <span class="spectator-chip" id="spec-scout-count">0 turns</span>
+              <span class="spectator-chip spectator-chip-next" id="spec-scout-next">--:--</span>
+            </div>
+            <div id="spec-scout-log" class="agents-log spectator-log"></div>
+          </div>
+          <div class="agents-window spectator spectator-b">
+            <div class="agents-window-title">
+              <span class="spectator-dot" id="spec-b-dot"></span>
+              <span>Critic · Efficiency</span>
+              <span class="spacer"></span>
+              <span class="spectator-chip" id="spec-b-count">0 turns</span>
+              <span class="spectator-chip spectator-chip-next" id="spec-b-next">--:--</span>
+            </div>
+            <div id="spec-b-log" class="agents-log spectator-log"></div>
+          </div>
+        </div>
+      </div>
+      <div id="agents-final" class="agents-final hidden"></div>
+      </div>
+    </section>
   </main>
 
   <!-- Confirm modal -->
@@ -218,6 +347,64 @@
       <div class="modal-actions">
         <button type="button" id="confirm-modal-cancel" class="btn btn-outline">Cancel</button>
         <button type="button" id="confirm-modal-confirm" class="btn btn-destructive">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- System & browser info modal -->
+  <div id="sysinfo-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="sysinfo-modal-title">
+    <div class="modal-card storage-modal-card">
+      <div class="modal-header">
+        <h3 id="sysinfo-modal-title">System &amp; Browser</h3>
+        <button type="button" id="sysinfo-modal-close" class="btn btn-ghost btn-icon" aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <div id="sysinfo-modal-body" class="sysinfo-list"></div>
+      <div class="sysinfo-overrides">
+        <div class="sysinfo-overrides-title">App overrides</div>
+        <label class="switch-label" title="Applies on next initialize · LiteRT-LM only, much slower"><input type="checkbox" id="sysinfo-cpu-toggle"> Force CPU — disable WebGPU for LiteRT-LM</label>
+        <div class="sysinfo-note">Browser flags can't be changed from a page — this override only affects CombsLLM. LiteRT-LM will mount its CPU backend on next initialize (much slower). tasks-genai requires WebGPU and ignores it. WebNN is not used by the current runtimes.</div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="sysinfo-modal-done" class="btn btn-primary">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terminal modal -->
+  <div id="terminal-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="terminal-modal-title">
+    <div class="modal-card terminal-modal-card">
+      <div class="modal-header">
+        <h3 id="terminal-modal-title">Terminal</h3>
+        <button type="button" id="terminal-modal-close" class="btn btn-ghost btn-icon" aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <div id="terminal-output" class="terminal-output"></div>
+      <div class="modal-actions">
+        <button type="button" id="terminal-clear" class="btn btn-outline">Clear</button>
+        <button type="button" id="terminal-done" class="btn btn-primary">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MCP servers modal -->
+  <div id="mcp-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="mcp-modal-title">
+    <div class="modal-card storage-modal-card">
+      <div class="modal-header">
+        <h3 id="mcp-modal-title">MCP Servers</h3>
+        <button type="button" id="mcp-modal-close" class="btn btn-ghost btn-icon" aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <div class="mcp-config-wrap">
+        <textarea id="mcp-config-input" class="mcp-config-input" spellcheck="false"></textarea>
+        <button type="button" id="mcp-connect-btn" class="btn btn-primary btn-sm">Connect</button>
+      </div>
+      <div id="mcp-server-list" class="mcp-server-list"></div>
+      <div class="modal-actions">
+        <button type="button" id="mcp-modal-done" class="btn btn-primary">Done</button>
       </div>
     </div>
   </div>

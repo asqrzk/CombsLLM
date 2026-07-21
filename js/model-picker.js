@@ -20,6 +20,7 @@ const FILTER_FACETS = [
   { id: 'audio', label: 'audio', match: (def) => def.tags?.includes('audio') },
   { id: 'litert', label: 'litert-lm', match: (def) => def.runtime === 'litert' },
   { id: 'tasks', label: 'tasks-genai', match: (def) => def.runtime === 'tasks' },
+  { id: 'litertjs', label: 'litert.js', match: (def) => def.runtime === 'litertjs' },
   { id: 'cached', label: 'cached', match: (def, ctx) => ctx.cachedUrls.has(modelDownloadUrl(def)) }
 ];
 

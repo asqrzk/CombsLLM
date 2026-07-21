@@ -12,5 +12,7 @@ export const state = {
   modelBlobUrl: null,     // object URL handed to the engine; revoked on swap
   generating: false,
   pruning: false,
-  isRestoring: false
+  isRestoring: false,
+  agentRunning: false,
+  view: 'chat'            // 'chat' | 'agents'
 };

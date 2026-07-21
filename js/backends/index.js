@@ -3,7 +3,10 @@
 // ============================================================
 import { LitertBackend } from './litert.js';
 import { TasksBackend } from './tasks.js';
+import { LitertJsBackend } from './litertjs.js';
 
 export function createBackend(runtime, modelDef) {
-  return runtime === 'tasks' ? new TasksBackend(modelDef) : new LitertBackend();
+  if (runtime === 'tasks') return new TasksBackend(modelDef);
+  if (runtime === 'litertjs') return new LitertJsBackend();
+  return new LitertBackend();
 }

@@ -21,12 +21,16 @@ export class TasksBackend {
     this.sdk = modelDef.sdk || TASKS_GENAI_STABLE;
     this.promptFormat = modelDef.promptFormat || 'gemma4';
     this.llm = null;
+    this.vision = false;
+    this.maxNumImages = 0;
   }
 
   // All options are create-time: changing them requires a remount.
   async mount(modelDef, modelUrl, { maxTokens = DEFAULT_MAX_TOKENS, vision = false, audio = false, maxNumImages = 0 } = {}) {
     const { FilesetResolver, LlmInference } = await loadTasksGenai(this.sdk);
     const genai = await FilesetResolver.forGenAiTasks(tasksGenaiWasmRoot(this.sdk));
+    this.vision = vision;
+    this.maxNumImages = maxNumImages;
     this.llm = await LlmInference.createFromOptions(genai, {
       baseOptions: { modelAssetPath: modelUrl },
       maxTokens,
