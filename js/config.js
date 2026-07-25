@@ -47,6 +47,26 @@ export const ARCHITECTURE_STAGE_LABELS = {
 //         runtime behavior (stateful-runtime|stateless-pipeline|legacy-streaming)
 //   size / architecture: display metadata for the model picker
 export const MODELS = {
+  'gemma-4-E2B-it-qat-mobile-ct': {
+    label: 'Gemma 4 E2B Multi Mobile',
+    repo: 'Padmanava/gemma_4_mobile_project',
+    file: 'litert_v2/model.litertlm',
+    runtime: 'litert',
+    promptFormat: 'gemma4',
+    tags: ['text', 'audio', 'image', 'webgpu', 'stateful-runtime'],
+    size: '~2.58 GB',
+    architecture: {
+      tokenizer: 'Bundled JSON Tokenizer (Client-side)',
+      patchers: 'None (Stripped for WebGPU memory limits)',
+      embedders: 'Text Embedding Lookup Table',
+      encoders: 'None (Stripped for WebGPU memory limits)',
+      decoder: 'Gemma 4 Decoder with MTP (Multi-Token Prediction)',
+      outputHead: 'Token Probability Distribution',
+      deTokenizer: 'Bundled Internal (Client-side)',
+      vaeDecoder: 'None (Text-out only)',
+      kvCaching: 'Native Memory-Mapped Stateful Cache'
+    }
+  },
   'gemma-4-E2B-it-web': {
     label: 'Gemma 4 E2B',
     repo: 'litert-community/gemma-4-E2B-it-litert-lm',

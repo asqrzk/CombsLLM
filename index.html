@@ -238,29 +238,17 @@
           <button type="button" id="agents-stop" class="btn btn-destructive btn-sm" disabled>Stop</button>
         </div>
         <details class="agents-settings" id="agents-settings" open>
-          <summary>Prompts &amp; timing</summary>
+          <summary>Prompts &amp; limits</summary>
           <div class="agents-settings-grid">
-            <label class="agents-field">Controller prompt
+            <label class="agents-field">Agent instructions
               <textarea id="agents-controller-prompt" class="agents-prompt" spellcheck="false"></textarea>
             </label>
-            <label class="agents-field">Worker prompt
-              <textarea id="agents-worker-prompt" class="agents-prompt" spellcheck="false"></textarea>
-            </label>
             <div class="agents-nums">
-              <label class="field-group">Controller check (s)
-                <input type="number" id="agents-controller-interval" class="input" value="30" min="2" max="120">
-              </label>
-              <label class="field-group">Worker check (s)
-                <input type="number" id="agents-worker-interval" class="input" value="10" min="2" max="120">
+              <label class="field-group">Max steps
+                <input type="number" id="agents-max-steps" class="input" value="20" min="1" max="100">
               </label>
               <label class="field-group">Max run (min)
                 <input type="number" id="agents-max-minutes" class="input" value="30" min="1" max="180">
-              </label>
-              <label class="field-group">Turn cap (s)
-                <input type="number" id="agents-turn-cap" class="input" value="40" min="5" max="300">
-              </label>
-              <label class="field-group">Stop phrase
-                <input type="text" id="agents-stop-phrase" class="input" value="COMBS YIPPEE">
               </label>
             </div>
           </div>
@@ -269,64 +257,18 @@
       <div class="agents-status">
         <span id="agents-status-text" class="agents-status-text">Idle</span>
         <span id="agents-elapsed" class="agents-elapsed">0:00</span>
-        <span id="agents-stats" class="agents-stats">turns C:0 · W:0 · tools:0</span>
+        <span id="agents-stats" class="agents-stats">steps:0 · tools:0 · cycles:0</span>
         <span class="spacer"></span>
-        <label class="agents-validated-label" title="Mark this run as a successful one">
-          <input type="checkbox" id="agents-validated" disabled> Validated
-        </label>
         <button type="button" id="agents-export" class="btn btn-outline btn-sm" disabled>Export run</button>
       </div>
       <div class="agents-windows">
         <div class="agents-window">
-          <div class="agents-window-title">Controller</div>
+          <div class="agents-window-title">Agent</div>
           <div id="agents-controller-log" class="agents-log"></div>
         </div>
         <div class="agents-window">
-          <div class="agents-window-title">Worker</div>
+          <div class="agents-window-title">Tools</div>
           <div id="agents-worker-log" class="agents-log"></div>
-        </div>
-      </div>
-      <div class="spectators">
-        <div class="spectators-head">
-          <span class="spectators-title">Spectators</span>
-          <span class="spectators-sub">random check-ins every 1–2 min</span>
-          <span class="spacer"></span>
-          <label class="spectators-toggle">
-            <input type="checkbox" id="spectators-enabled" checked>
-            <span>enabled</span>
-          </label>
-        </div>
-        <div class="spectators-grid">
-          <div class="agents-window spectator spectator-a">
-            <div class="agents-window-title">
-              <span class="spectator-dot" id="spec-a-dot"></span>
-              <span>Critic · Performance</span>
-              <span class="spacer"></span>
-              <span class="spectator-chip" id="spec-a-count">0 turns</span>
-              <span class="spectator-chip spectator-chip-next" id="spec-a-next">--:--</span>
-            </div>
-            <div id="spec-a-log" class="agents-log spectator-log"></div>
-          </div>
-          <div class="agents-window spectator spectator-scout">
-            <div class="agents-window-title">
-              <span class="spectator-dot" id="spec-scout-dot"></span>
-              <span>Scout · MCP vision</span>
-              <span class="spacer"></span>
-              <span class="spectator-chip" id="spec-scout-count">0 turns</span>
-              <span class="spectator-chip spectator-chip-next" id="spec-scout-next">--:--</span>
-            </div>
-            <div id="spec-scout-log" class="agents-log spectator-log"></div>
-          </div>
-          <div class="agents-window spectator spectator-b">
-            <div class="agents-window-title">
-              <span class="spectator-dot" id="spec-b-dot"></span>
-              <span>Critic · Efficiency</span>
-              <span class="spacer"></span>
-              <span class="spectator-chip" id="spec-b-count">0 turns</span>
-              <span class="spectator-chip spectator-chip-next" id="spec-b-next">--:--</span>
-            </div>
-            <div id="spec-b-log" class="agents-log spectator-log"></div>
-          </div>
         </div>
       </div>
       <div id="agents-final" class="agents-final hidden"></div>
