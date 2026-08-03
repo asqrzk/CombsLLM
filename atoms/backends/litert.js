@@ -8,7 +8,7 @@
 import { Engine, Backend } from 'https://cdn.jsdelivr.net/npm/@litert-lm/core/+esm';
 import { SYSTEM_PREFACE, DEFAULT_MAX_TOKENS } from '../config.js';
 import { compressToCaveman } from '../text.js';
-import { dataUrlToBase64 } from '../image.js';
+import { dataUrlToBase64 } from '../composer/image.js';
 
 // Safety cap for the agentic tool-calling loop.
 const MAX_TOOL_ROUNDS = 5;

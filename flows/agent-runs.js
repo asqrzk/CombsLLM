@@ -17,22 +17,22 @@ import {
   agentsBadge, agentsSettings, toggleConsoleBtn,
   agentsControllerLog, agentsWorkerLog, agentsFinal,
   consolePanel, chatScroll, composer, headerTitle, newChatBtnLabel
-} from './dom.js';
-import { state } from './state.js';
-import { toast, showConfirmModal, hideConfirmModal } from './ui.js';
-import { escapeHtml, deriveTitle } from './text.js';
-import { mcpManager, captureScreenshot } from './mcp.js';
-import { idbPutAgentRun, idbGetAgentRuns, idbDeleteAgentRun } from './store.js';
-import { getModelName } from './config.js';
-import { createLitertLanguageModel } from './backends/ai-sdk-litert.js';
-import { createTasksLanguageModel } from './backends/ai-sdk-tasks.js';
-import { compactMessages } from './context-budget.js';
+} from '../atoms/dom.js';
+import { state } from '../atoms/state.js';
+import { toast, showConfirmModal, hideConfirmModal } from '../atoms/ui.js';
+import { escapeHtml, deriveTitle } from '../atoms/text.js';
+import { mcpManager, captureScreenshot } from '../atoms/mcp.js';
+import { idbPutAgentRun, idbGetAgentRuns, idbDeleteAgentRun } from '../atoms/store.js';
+import { getModelName } from '../atoms/config.js';
+import { createLitertLanguageModel } from '../atoms/backends/ai-sdk-litert.js';
+import { createTasksLanguageModel } from '../atoms/backends/ai-sdk-tasks.js';
+import { compactMessages } from '../atoms/context-budget.js';
 
 // The AI SDK (~260 KB from esm.sh) is loaded lazily on the first run so the
 // initial page boot is not blocked on the CDN module graph.
 let sdkPromise = null;
 function loadSdk() {
-  if (!sdkPromise) sdkPromise = import('./ai-sdk.js');
+  if (!sdkPromise) sdkPromise = import('../atoms/ai-sdk.js');
   return sdkPromise;
 }
 

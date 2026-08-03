@@ -6,7 +6,7 @@
 // into the model's media tokens + encoder embeddings.
 // ============================================================
 import { contentToText, compressToCaveman } from './text.js';
-import { dataUrlToMonoAudioBuffer } from './audio.js';
+import { dataUrlToMonoAudioBuffer } from './composer/audio.js';
 
 export async function buildPrompt(log, useCaveman, format) {
   return format === 'gemma3' ? buildGemma3Prompt(log, useCaveman) : buildGemma4Prompt(log, useCaveman);

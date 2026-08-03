@@ -1,13 +1,13 @@
 // ============================================================
 // CombsLLM — application orchestration.
 // UI wiring, chat session management, engine lifecycle, metrics.
-// Backends, storage, rendering and pipelines live in js/ modules.
+// Backends, storage, rendering and pipelines live in atoms/ modules.
 // ============================================================
 import {
   SYSTEM_PREFACE, DB_NAME, DEFAULT_MAX_TOKENS,
   getModelDef, getModelName, modelDownloadUrl
-} from './js/config.js';
-import { state } from './js/state.js';
+} from './atoms/config.js';
+import { state } from './atoms/state.js';
 import {
   app, chatBox, inputField, sendBtn, loadBtn, attachBtn, imageUpload,
   attachChip, attachChipName, attachChipRemove, micBtn, audioChip, audioChipName, audioChipRemove,
@@ -21,29 +21,29 @@ import {
   jsHeapTxt, kvCacheTxt, contextProgress, diskUsageTxt,
   confirmModal, storageModal, storageModalBody,
   storageModalClose, storageModalDone, storageModalPurge
-} from './js/dom.js';
-import { idbPut, idbGet, idbGetAll, idbDelete } from './js/store.js';
-import { toast, showConfirmModal, hideConfirmModal } from './js/ui.js';
+} from './atoms/dom.js';
+import { idbPut, idbGet, idbGetAll, idbDelete } from './atoms/store.js';
+import { toast, showConfirmModal, hideConfirmModal } from './atoms/ui.js';
 import {
   renderMarkdownInto, renderAllMessages, addUserBubble, addAiMessageShell,
   syncEmptyState, scrollChatToBottom
-} from './js/chat-ui.js';
-import { escapeHtml, formatBytes, deriveTitle, estimateMessageTokens } from './js/text.js';
-import { validateImageFile, processImageFile, blobToDataUrl } from './js/image.js';
-import { isRecording, startAudioRecording, stopAudioRecording } from './js/audio.js';
+} from './atoms/chat-ui.js';
+import { escapeHtml, formatBytes, deriveTitle, estimateMessageTokens } from './atoms/text.js';
+import { validateImageFile, processImageFile, blobToDataUrl } from './atoms/composer/image.js';
+import { isRecording, startAudioRecording, stopAudioRecording } from './atoms/composer/audio.js';
 import {
   fetchAndCacheModel, getCacheItems, deleteCacheItem
-} from './js/model-cache.js';
-import { createBackend } from './js/backends/index.js';
-import { loadPresets } from './js/presets.js';
+} from './atoms/model-cache.js';
+import { createBackend } from './atoms/backends/index.js';
+import { loadPresets } from './atoms/presets.js';
 import {
   initModelPicker, getSelectedModelId, setSelectedModelId,
   setModelPickerDisabled, refreshModelCacheInfo
-} from './js/model-picker.js';
-import { initSystemInfo, isCpuForced } from './js/system-info.js';
-import { initTerminal } from './js/terminal.js';
-import { initMcp, mcpManager, onServersChanged } from './js/mcp.js';
-import { initAgents, exitAgentsView, resetAgentsForm, renderRunList } from './js/agents.js';
+} from './atoms/model-picker.js';
+import { initSystemInfo, isCpuForced } from './atoms/system-info.js';
+import { initTerminal } from './atoms/terminal.js';
+import { initMcp, mcpManager, onServersChanged } from './atoms/mcp.js';
+import { initAgents, exitAgentsView, resetAgentsForm, renderRunList } from './flows/agent-runs.js';
 
 // ============================================================
 // MODEL SELECT HELPERS

@@ -1,0 +1,67 @@
+<!doctype html>
+<!-- Smoke tests — open served over HTTP: /tests/ (python3 -m http.server) -->
+<html>
+<head><meta charset="utf-8"><title>CombsLLM smoke tests</title>
+<style>body{font:14px monospace;background:#111;color:#eee;padding:2rem}.pass{color:#6f6}.fail{color:#f66}</style></head>
+<body>
+<h1>CombsLLM smoke tests</h1>
+<div id="out">running…</div>
+<script type="module">
+import { compressToCaveman, escapeHtml, formatBytes, deriveTitle, estimateMessageTokens } from '../atoms/text.js';
+import { compactMessages } from '../atoms/context-budget.js';
+import { flows, flowIds, loadFlow } from '../flows/registry.js';
+
+const out = document.getElementById('out');
+const results = [];
+function test(name, fn) {
+  try { fn(); results.push(['pass', name]); }
+  catch (e) { results.push(['fail', `${name}: ${e.message}`]); }
+}
+function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
+
+test('escapeHtml escapes tags', () => {
+  assert(escapeHtml('<b>&"') === '&lt;b&gt;&amp;&quot;');
+});
+test('formatBytes formats', () => {
+  assert(formatBytes(0).includes('0'), 'zero');
+  assert(formatBytes(5 * 1024 * 1024).includes('MB'), 'MB unit');
+});
+test('deriveTitle falls back sensibly', () => {
+  assert(deriveTitle([{ role: 'user', content: 'hello world' }]) === 'hello world');
+  assert(deriveTitle([]) === 'New chat');
+});
+test('estimateMessageTokens is positive for text', () => {
+  assert(estimateMessageTokens({ role: 'user', content: 'hello there world' }) > 0);
+});
+test('compressToCaveman drops stopwords', () => {
+  const c = compressToCaveman('the quick fox is in the house');
+  assert(!/\bthe\b/i.test(c), `stopword kept: ${c}`);
+  assert(/quick/.test(c) && /fox/.test(c), 'content words dropped');
+});
+test('compactMessages keeps append-only fast path under budget', () => {
+  const msgs = [
+    { role: 'system', content: 'sys' },
+    { role: 'user', content: 'hi' },
+    { role: 'assistant', content: 'hello' },
+  ];
+  const compacted = compactMessages(msgs);
+  assert(compacted === msgs, 'should return history untouched under budget');
+});
+test('registry lists the shell flows', () => {
+  assert(flowIds().includes('chat') && flowIds().includes('agent-runs'));
+  assert(flows.chat.owner === 'shell');
+});
+await (async () => {
+  try {
+    await loadFlow('__nope__');
+    results.push(['fail', 'loadFlow should reject unknown ids']);
+  } catch { results.push(['pass', 'loadFlow rejects unknown ids']); }
+
+  const failed = results.filter(r => r[0] === 'fail').length;
+  out.innerHTML = results.map(([k, v]) => `<div class="${k}">${k.toUpperCase()} — ${v}</div>`).join('')
+    + `<h2>${results.length - failed}/${results.length} passed</h2>`;
+  document.title = failed ? `FAIL (${failed})` : 'ALL PASS';
+})();
+</script>
+</body>
+</html>

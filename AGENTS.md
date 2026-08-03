@@ -7,11 +7,14 @@ Keep it that way.
 ## Layout
 
 - `index.html`, `app.js`, `css/`, `presets.json` — app shell
-- `js/` → being restructured into `atoms/` + `flows/` (Phase 1)
-  - `atoms/` — capability units (backends, model-cache, store, chat-ui,
-    mcp, agent-runner, auth, emoji…). Narrow contracts, NO page code.
-  - `flows/` — one file per page (chat, kv-chat, emoji-studio,
-    agent-runs), wired via `flows/registry.js`.
+- `atoms/` — capability units (backends/, model-cache, model-picker,
+  store, chat-ui, composer/(image,audio), mcp, context-budget, prompts,
+  presets, system-info, terminal, text, ui, dom, state). Narrow
+  contracts, NO page code.
+- `flows/` — one file per page (`agent-runs.js`, future: kv-chat,
+  emoji-studio), wired via `flows/registry.js`. The chat flow is still
+  shell-owned by `app.js` (extraction is future work).
+- `tests/` — browser smoke page (`/tests/` when served), no framework.
 - `server/` — Deno hosted layer (Phase 3+): static, `/api/authn`,
   `/api/relay`, `/api/emoji`. Runtime secrets live in `server/data/` and
   `server/*.key` (gitignored, mode 600).
@@ -44,6 +47,7 @@ Regression checklist after ANY change (manual, browser):
 2. Vision: attach image on a tasks/Gemma-3n preset → answer mentions it
 3. Agent run: starts, calls a tool, exports run JSON
 4. Chats persist across reload (IndexedDB)
+5. `/tests/` smoke page: ALL PASS
 
 ## Notes
 

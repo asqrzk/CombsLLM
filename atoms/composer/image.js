@@ -3,8 +3,8 @@
 // Images already within bounds keep their original bytes; larger ones
 // are downscaled so the longest side fits IMAGE_MAX_DIM and re-encoded.
 // ============================================================
-import { IMAGE_MAX_BYTES, IMAGE_MAX_DIM, IMAGE_MIME_WHITELIST } from './config.js';
-import { formatBytes } from './text.js';
+import { IMAGE_MAX_BYTES, IMAGE_MAX_DIM, IMAGE_MIME_WHITELIST } from '../config.js';
+import { formatBytes } from '../text.js';
 
 export function validateImageFile(file) {
   if (!IMAGE_MIME_WHITELIST.has(file.type)) {
