@@ -1,2 +1,7 @@
+.DS_Store
+node_modules/
+*.log
+.env
 issues.md
-learnings.md
+server/data/
+server/*.key
