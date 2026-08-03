@@ -16,12 +16,13 @@ import {
   menuBtn, sidebarBackdrop, sidebarCloseBtn, newChatBtn, chatListEl, headerTitle,
   engineStatus, engineStatusText, toggleConsoleBtn, consolePanel, agentsSettings,
   sidebarStorageTxt, hfTokenInput,
-  runtimeSelect, maxTokensInput, maxImagesInput, presetSelect,
+  runtimeSelect, engineUrlGroup, engineUrlInput, maxTokensInput, maxImagesInput, presetSelect,
   acceleratorSelect,
   jsHeapTxt, kvCacheTxt, contextProgress, diskUsageTxt,
   confirmModal, storageModal, storageModalBody,
   storageModalClose, storageModalDone, storageModalPurge
 } from './atoms/dom.js';
+import { combsEngineUrl, setCombsEngineUrl } from './atoms/backends/combs-remote.js';
 import { idbPut, idbGet, idbGetAll, idbDelete } from './atoms/store.js';
 import { toast, showConfirmModal, hideConfirmModal } from './atoms/ui.js';
 import {
@@ -65,8 +66,18 @@ function currentEngineConfig() {
     vision: visionToggle.checked,
     audio: audioToggle.checked,
     forceCpu: isCpuForced(),
-    accelerator: acceleratorSelect.value
+    accelerator: acceleratorSelect.value,
+    engineUrl: engineUrlInput.value.trim() || undefined
   };
+}
+
+// The remote backend needs no artifact download or WebGPU; show the
+// engine URL field only when it is selected.
+function syncRemoteRuntimeUi() {
+  const isRemote = runtimeSelect.value === 'combs';
+  engineUrlGroup.hidden = !isRemote;
+  if (isRemote && !engineUrlInput.value) engineUrlInput.value = combsEngineUrl();
+  if (isRemote) setCombsEngineUrl(engineUrlInput.value.trim() || combsEngineUrl());
 }
 
 // ============================================================
@@ -448,7 +459,8 @@ async function initModel() {
 
   try {
     await disposeBackend();
-    const localBlobUrl = await fetchAndCacheModel(modelDownloadUrl(modelDef));
+    // Remote backends have no artifact to download.
+    const localBlobUrl = modelDef.remote ? null : await fetchAndCacheModel(modelDownloadUrl(modelDef));
     state.modelBlobUrl = localBlobUrl;
 
     toast(`Mounting ${modelDef.label}…`, 'info', 2800);
@@ -630,6 +642,16 @@ async function sendMessage() {
   const lastAssistant = state.activeMessagesLog[state.activeMessagesLog.length - 1];
   if (lastAssistant && lastAssistant.role === 'assistant') {
     lastAssistant.metrics = metricsData;
+  }
+
+  // KV cache stats (combs-remote backend): surface the rolling-session
+  // prefix reuse — cached_tokens = prompt tokens the engine did NOT
+  // recompute this turn.
+  const usage = state.backend?.lastUsage;
+  if (usage) {
+    const kvNote = `KV ⚡ ${usage.cachedTokens}/${usage.promptTokens} prompt tokens cached`;
+    metrics.textContent += (metrics.textContent ? ' · ' : '') + kvNote;
+    if (lastAssistant) lastAssistant.kvUsage = usage;
   }
 
   await persistActiveChat();
@@ -836,9 +858,14 @@ hfTokenInput.addEventListener('change', (e) => {
 // Create-time config inputs: used on the next initialization.
 function onCreateTimeConfigChange() {
   presetSelect.value = '';
+  syncRemoteRuntimeUi();
   if (state.backend) toast('Runtime/token/image settings apply on reinitialize.', 'info', 3000);
 }
 runtimeSelect.addEventListener('change', onCreateTimeConfigChange);
+engineUrlInput.addEventListener('change', () => {
+  setCombsEngineUrl(engineUrlInput.value.trim() || combsEngineUrl());
+  if (state.backend?.kind === 'combs') toast('Engine URL applies on reinitialize.', 'info', 3000);
+});
 acceleratorSelect.addEventListener('change', onCreateTimeConfigChange);
 maxTokensInput.addEventListener('change', onCreateTimeConfigChange);
 maxImagesInput.addEventListener('change', onCreateTimeConfigChange);
@@ -846,13 +873,14 @@ maxImagesInput.addEventListener('change', onCreateTimeConfigChange);
 // Presets: populate the controls from presets.json; initialization stays manual.
 function applyPreset(preset) {
   syncModelSelect(preset.model);
-  runtimeSelect.value = preset.runtime;
+  runtimeSelect.value = preset.runtime; syncRemoteRuntimeUi();
   maxTokensInput.value = preset.maxTokens ?? DEFAULT_MAX_TOKENS;
   maxImagesInput.value = preset.maxNumImages ?? 0;
   visionToggle.checked = !!preset.vision;
   audioToggle.checked = !!preset.audio;
   cavemanToggle.checked = preset.caveman !== false;
   acceleratorSelect.value = preset.accelerator || 'webgpu';
+  syncRemoteRuntimeUi();
   localStorage.setItem('combsllm.vision', visionToggle.checked ? '1' : '0');
   localStorage.setItem('combsllm.audio', audioToggle.checked ? '1' : '0');
   toast(`Preset "${preset.name}" loaded — initialize the engine to run it.`, 'success', 3600);
@@ -868,7 +896,7 @@ presetSelect.addEventListener('change', async () => {
 async function onModelPicked(id) {
   // The registry entry suggests a default runtime; the user can override it.
   const def = getModelDef(id);
-  if (def) runtimeSelect.value = def.runtime;
+  if (def) { runtimeSelect.value = def.runtime; syncRemoteRuntimeUi(); }
   presetSelect.value = '';
   if (!state.backend) return;
   if (state.generating) {
@@ -912,7 +940,7 @@ async function onModelPicked(id) {
   // Sync the runtime dropdown to the selected model's suggested default and
   // populate the preset picker.
   const initialDef = getModelDef(getSelectedModel());
-  if (initialDef) runtimeSelect.value = initialDef.runtime;
+  if (initialDef) { runtimeSelect.value = initialDef.runtime; syncRemoteRuntimeUi(); }
   const presets = await loadPresets();
   presets.forEach((p, i) => {
     const opt = document.createElement('option');

@@ -40,13 +40,34 @@ export const ARCHITECTURE_STAGE_LABELS = {
 };
 
 // Model registry. Each entry is one downloadable artifact plus metadata:
-//   runtime: suggested default runtime ('litert' | 'tasks') — the user can
+//   runtime: suggested default runtime ('litert' | 'tasks' | 'combs') — the user can
 //            override it in the console; wrong combinations fail at runtime.
+//   remote: true — no download; runtime 'combs' talks to a `combs serve`
+//            instance (CombsEngine) over its OpenAI-compatible API.
 //   promptFormat: which manual template the tasks backend should emit
 //   tags: capabilities (text|vision|audio), container (webgpu|native),
 //         runtime behavior (stateful-runtime|stateless-pipeline|legacy-streaming)
 //   size / architecture: display metadata for the model picker
 export const MODELS = {
+  'combs-remote': {
+    label: 'Combs Engine (remote)',
+    remote: true,
+    runtime: 'combs',
+    promptFormat: 'gemma4',
+    tags: ['text', 'remote', 'stateful-runtime'],
+    size: 'server-side',
+    architecture: {
+      tokenizer: 'Server-side (combs serve)',
+      patchers: 'Server-side',
+      embedders: 'Server-side',
+      encoders: 'Server-side',
+      decoder: 'Whatever model combs serve was started with',
+      outputHead: 'OpenAI-compatible SSE stream',
+      deTokenizer: 'Server-side',
+      vaeDecoder: 'None',
+      kvCaching: 'Rolling-session KV prefix reuse (session_id; cached_tokens in usage)'
+    }
+  },
   'gemma-4-E2B-it-qat-mobile-ct': {
     label: 'Gemma 4 E2B Multi Mobile',
     repo: 'Padmanava/gemma_4_mobile_project',

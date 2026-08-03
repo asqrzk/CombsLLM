@@ -22,6 +22,14 @@ export const flows = {
     title: 'Chat',
     owner: 'shell', // app.js — extraction to flows/chat.js is future work
   },
+  'kv-chat': {
+    title: 'KV-Cached Chat',
+    // Realized via composition, not a separate page: chat flow (shell) +
+    // 'combs-remote' registry model + the backend's lastUsage surfacing
+    // (per-message "KV ⚡ cached" metric). Pick model "Combs Engine
+    // (remote)" in the model picker to enter this flow.
+    owner: 'shell',
+  },
   'agent-runs': {
     title: 'Agent Runs',
     loader: () => import('./agent-runs.js'),

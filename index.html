@@ -118,7 +118,12 @@
                 <option value="litert">LiteRT-LM</option>
                 <option value="tasks">MediaPipe tasks-genai</option>
                 <option value="litertjs">LiteRT.js (.tflite)</option>
+                <option value="combs">Combs Engine (remote)</option>
               </select>
+            </div>
+            <div class="field-group" id="engine-url-group" hidden>
+              <label for="engine-url" title="Base URL of a combs serve instance">Engine URL</label>
+              <input type="text" id="engine-url" class="input" placeholder="http://localhost:8080" style="width: 11rem;">
             </div>
             <div class="field-group">
               <label for="accelerator-select" title="LiteRT.js compile target">Accelerator</label>
