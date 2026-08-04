@@ -23,6 +23,19 @@ export class TasksBackend {
     this.llm = null;
     this.vision = false;
     this.maxNumImages = 0;
+    // Serialization for the single LlmInference: generateResponse rejects
+    // any overlap, and an aborted call may never settle (zombie) — the
+    // queue makes later calls WAIT for it instead of throwing
+    // "Previous invocation or loading is still ongoing".
+    this._llmQueue = Promise.resolve();
+  }
+
+  // Serialize every generateResponse against the single LlmInference.
+  // A failed call must not poison the queue for the next one.
+  enqueueLlm(fn) {
+    const p = this._llmQueue.then(fn);
+    this._llmQueue = p.catch(() => {});
+    return p;
   }
 
   // All options are create-time: changing them requires a remount.
@@ -45,12 +58,12 @@ export class TasksBackend {
   async send(content, { history = [], caveman = false } = {}, onText) {
     const prompt = await buildPrompt(history, caveman, this.promptFormat);
     let streamed = '';
-    const full = await this.llm.generateResponse(prompt, (partial) => {
+    const full = await this.enqueueLlm(() => this.llm.generateResponse(prompt, (partial) => {
       if (partial) {
         streamed += partial;
         onText(partial);
       }
-    });
+    }));
     return streamed || full || '';
   }
 

@@ -283,9 +283,27 @@ export function createTasksLanguageModel(backend, modelId = 'tasks-on-device') {
     };
 
     try {
-      await backend.llm.generateResponse(promptParts, onPartial);
+      // Serialized against the single LlmInference (see tasks.js). The
+      // QUEUE SLOT tracks the raw generateResponse promise — a slow zombie
+      // (never settles after cancelProcessing) delays later calls instead
+      // of throwing "Previous invocation or loading is still ongoing".
+      // The CALLER races that slot against the abort signal so an aborted
+      // run unwinds immediately; the late zombie outcome is swallowed.
+      const call = backend.enqueueLlm(() => backend.llm.generateResponse(promptParts, onPartial));
+      const abortRace = new Promise((_, reject) => {
+        if (abortSignal) {
+          if (abortSignal.aborted) reject(new Error('aborted'));
+          else abortSignal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+        }
+      });
+      try {
+        await Promise.race([call, abortRace]);
+      } catch (raceErr) {
+        if (aborted) call.catch(() => {}); // late zombie outcome — swallow
+        throw raceErr;
+      }
     } catch (e) {
-      if (!aborted) throw e;
+      if (!aborted && e.message !== 'aborted') throw e;
     } finally {
       if (abortSignal) abortSignal.removeEventListener('abort', onAbort);
       if (aborted) {
