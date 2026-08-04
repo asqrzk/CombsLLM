@@ -1,59 +1,214 @@
 <!DOCTYPE html>
-<!-- flows launcher — the best-of capability pages, connected to atoms. -->
+<!-- flows launcher — rendered FROM flows/registry.js (single source of truth).
+     Live-probes the capabilities each flow needs and greets you with the
+     living emoji when its host is up. Zero-build, one module script. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <title>CombsLLM — flows</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/flows.css">
 <style>
-  :root { --bg:#f4f4f5; --panel:#fff; --border:#e4e4e7; --fg:#18181b; --dim:#71717a; }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 -apple-system,"Helvetica Neue",sans-serif; }
-  header { padding:12px 20px; border-bottom:1px solid var(--border); background:var(--panel); display:flex; align-items:baseline; gap:12px; }
-  header h1 { font-size:15px; margin:0; }
-  header span { color:var(--dim); font-size:12px; }
-  header a { margin-left:auto; color:var(--dim); font-size:12px; text-decoration:none; }
-  header a:hover { color:var(--fg); }
-  main { max-width:960px; margin:0 auto; padding:24px 20px; display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
-  .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:18px; text-decoration:none; color:inherit; transition:box-shadow .15s; display:block; }
-  .card:hover { box-shadow:0 4px 16px rgba(0,0,0,.08); }
-  .card h2 { font-size:15px; margin:0 0 6px; }
+  header { align-items:center; }
+  #fox { width:40px; height:40px; image-rendering:pixelated; border-radius:8px;
+    background:var(--bg); flex:none; display:grid; place-items:center;
+    font-size:24px; line-height:1; overflow:hidden; }
+  #fox canvas { width:40px; height:40px; image-rendering:pixelated; }
+  #status { display:flex; gap:8px; flex-wrap:wrap; padding:10px 20px 0; max-width:960px; margin:0 auto; }
+  .pill { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--dim);
+    border:1px solid var(--border); border-radius:99px; padding:3px 10px; background:var(--panel); }
+  .pill .dot { width:7px; height:7px; border-radius:99px; background:var(--border); }
+  .pill.up .dot { background:var(--green); box-shadow:0 0 6px var(--green); }
+  .pill.warn .dot { background:var(--amber); }
+  main { max-width:960px; margin:0 auto; padding:18px 20px 8px;
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
+  .card { position:relative; background:var(--panel); border:1px solid var(--border); border-radius:12px;
+    padding:18px; text-decoration:none; color:inherit; display:block;
+    transition:transform .15s ease, box-shadow .15s ease, border-color .15s; }
+  a.card:hover { transform:translateY(-3px); box-shadow:0 8px 24px rgba(0,0,0,.10); border-color:var(--dim); }
+  .card h2 { font-size:15px; margin:0 0 6px; display:flex; align-items:center; gap:8px; }
   .card p { font-size:12px; color:var(--dim); margin:0; }
-  .card .tag { display:inline-block; font-size:10px; color:var(--dim); border:1px solid var(--border); border-radius:99px; padding:1px 8px; margin-top:10px; }
+  .card .foot { display:flex; align-items:center; gap:8px; margin-top:12px; }
+  .card .tag { font-size:10px; color:var(--dim); border:1px solid var(--border); border-radius:99px; padding:1px 8px; }
+  .card .key { margin-left:auto; font-size:10px; color:var(--dim); border:1px solid var(--border);
+    border-radius:5px; padding:0 6px; font-family:ui-monospace,monospace; }
+  .card .need { font-size:11px; margin-top:10px; min-height:14px; color:var(--dim); }
+  .card .need.down { color:var(--amber); }
+  .card .need code { background:var(--bg); border-radius:4px; padding:0 4px; font-size:10px; }
+  .card .need .dot { display:inline-block; width:7px; height:7px; border-radius:99px;
+    background:var(--border); margin-right:6px; }
+  .card .need.up .dot { background:var(--green); }
+  .card .need.down .dot { background:var(--amber); }
+  .card.last { border-color:var(--green); }
+  .card.last::after { content:'⏎ jump back in'; position:absolute; top:10px; right:12px;
+    font-size:10px; color:var(--green); }
+  .card.info { border-style:dashed; cursor:default; }
+  footer { max-width:960px; margin:0 auto; padding:8px 20px 28px; color:var(--dim); font-size:11px; }
+  footer kbd { border:1px solid var(--border); border-radius:5px; padding:0 5px;
+    font-family:ui-monospace,monospace; font-size:10px; background:var(--panel); }
 </style>
 </head>
 <body>
 <header>
+  <div id="fox" title="living emoji — asleep (host down)">💤</div>
   <h1>CombsLLM flows</h1>
   <span>capability pages — atoms connected into flows</span>
   <a href="/">← app</a>
 </header>
-<main>
-  <a class="card" href="/flows/kv-chat.html">
-    <h2>⚡ KV chat</h2>
-    <p>Full-transcript chat on the engine's rolling-session KV prefix reuse, with a per-turn cache-hit panel.</p>
-    <span class="tag">combs serve</span>
-  </a>
-  <a class="card" href="/flows/debate.html">
-    <h2>🗣 Debate</h2>
-    <p>Agents argue a motion — each on its own named KV session. Chat-native history, anti-parrot sampling, per-turn cache stats.</p>
-    <span class="tag">combs serve</span>
-  </a>
-  <a class="card" href="/flows/multi-turn.html">
-    <h2>🪟 Multi-turn</h2>
-    <p>Sliding-window context with a live preview of exactly what the model sees next. The windowed contrast to KV chat.</p>
-    <span class="tag">combs serve</span>
-  </a>
-  <a class="card" href="/flows/emoji-studio.html">
-    <h2>✨ Emoji studio</h2>
-    <p>Living CombsMesh emojis — persona chat, emotions/lifecycle/todos in the artifact, version chain with time-travel.</p>
-    <span class="tag">server + mesh FFI</span>
-  </a>
-  <a class="card" href="/">
-    <h2>💬 App chat</h2>
-    <p>The main app: on-device LiteRT/MediaPipe models, vision+audio, agent runs with MCP tools.</p>
-    <span class="tag">on-device</span>
-  </a>
-</main>
+<div id="status"></div>
+<main id="grid"></main>
+<footer>
+  rendered from <kbd>flows/registry.js</kbd> — add a flow there and it appears here ·
+  press <kbd>1</kbd>–<kbd>9</kbd> to launch · <kbd>⏎</kbd> to jump back in
+</footer>
+
+<script type="module">
+import { flows } from './registry.js';
+import { engineBase } from '../atoms/engine/index.js';
+import { emojiHost, decodeFrames } from '../atoms/emoji/index.js';
+import { hasServer } from '../atoms/auth/index.js';
+
+const LS_LAST = 'combsllm.lastFlow';
+const $ = (id) => document.getElementById(id);
+
+// ── cards from the registry ─────────────────────────────────────────
+const pages = Object.entries(flows).filter(([, f]) => f.owner === 'page' && f.icon);
+const grid = $('grid');
+const openers = [];
+
+pages.forEach(([id, f], i) => {
+  const el = document.createElement(f.spawnOnly ? 'div' : 'a');
+  el.className = 'card' + (f.spawnOnly ? ' info' : '');
+  if (!f.spawnOnly) el.href = f.url;
+  el.innerHTML = `
+    <h2>${f.icon} ${f.title}</h2>
+    <p>${f.blurb}</p>
+    <div class="foot"><span class="tag">${f.tag}</span>${i < 9 && !f.spawnOnly ? `<span class="key">${i + 1}</span>` : ''}</div>
+    <div class="need" data-needs="${(f.needs || []).join(',')}"></div>`;
+  grid.appendChild(el);
+  if (!f.spawnOnly) {
+    el.addEventListener('click', () => localStorage.setItem(LS_LAST, f.url));
+    openers[i + 1] = () => { localStorage.setItem(LS_LAST, f.url); location.href = f.url; };
+  }
+});
+
+// last-visited highlight + ⏎
+const last = localStorage.getItem(LS_LAST);
+if (last) {
+  const el = [...grid.querySelectorAll('a.card')].find((a) => a.getAttribute('href') === last);
+  if (el) el.classList.add('last');
+}
+addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'Enter' && last) { location.href = last; return; }
+  const n = parseInt(e.key, 10);
+  if (openers[n]) openers[n]();
+});
+
+// ── capability probes (raw fetch only — never trip the 428 dialog) ──
+const timeout = (ms) => AbortSignal.timeout(ms);
+const probe = {
+  async server() {
+    try { return (await hasServer()) ? 'up' : 'down'; } catch { return 'down'; }
+  },
+  async engine() {
+    // Granted already? → relay probe is dialog-free. Static host → direct.
+    // 401/428/network → report honestly, never prompt here.
+    try {
+      if (!(await hasServer())) {
+        const d = await fetch(`${engineBase()}/health`, { cache: 'no-store', signal: timeout(2500) });
+        return d.ok ? 'up' : 'down';
+      }
+      const r = await fetch('/api/relay', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ url: `${engineBase()}/health`, scope: 'net:combs-engine', detail: 'engine health probe' }),
+        cache: 'no-store', signal: timeout(2500),
+      });
+      if (r.status === 401 || r.status === 428) return 'locked';
+      return r.ok ? 'up' : 'down';
+    } catch { return 'down'; }
+  },
+  async emoji() {
+    try {
+      const r = await fetch('/api/emoji/state', { cache: 'no-store', signal: timeout(2000) });
+      if (r.status === 401) return 'locked';
+      return r.ok ? 'up' : 'down';
+    } catch { return 'down'; }
+  },
+};
+
+const HINTS = {
+  engine: {
+    up: 'engine online', locked: 'engine — unlock passkey / grant <code>net:combs-engine</code> on first chat',
+    down: `engine offline — start <code>combs serve</code> (${engineBase()})`,
+  },
+  'emoji-host': {
+    up: 'emoji host alive', locked: 'unlock passkey to wake the emoji',
+    down: 'host down — needs <code>COMBS_MESH_LIB</code> + <code>COMBS_ENGINE_URL</code>',
+  },
+  server: {
+    up: 'server-hosted', locked: 'server up — passkey locked',
+    down: 'static hosting — server flows unavailable',
+  },
+};
+
+async function refresh() {
+  const server = await Promise.allSettled([probe.server(), probe.engine(), probe.emoji()]);
+  const state = {
+    server: server[0].status === 'fulfilled' ? server[0].value : 'down',
+    engine: server[1].status === 'fulfilled' ? server[1].value : 'down',
+    'emoji-host': server[2].status === 'fulfilled' ? server[2].value : 'down',
+  };
+  // status pills
+  $('status').innerHTML = ['server', 'engine', 'emoji-host'].map((k) => {
+    const v = state[k];
+    const cls = v === 'up' ? 'up' : v === 'locked' ? 'warn' : '';
+    const label = { server: 'server', engine: 'engine', 'emoji-host': 'emoji host' }[k];
+    return `<span class="pill ${cls}"><span class="dot"></span>${label} · ${v}</span>`;
+  }).join('');
+  // per-card hints
+  grid.querySelectorAll('.need').forEach((el) => {
+    const needs = (el.dataset.needs || '').split(',').filter(Boolean);
+    if (!needs.length) { el.innerHTML = '<span class="dot"></span>runs fully on-device'; el.className = 'need up'; return; }
+    const badIdx = needs.findIndex((n) => state[n] !== 'up');
+    if (badIdx === -1) {
+      el.innerHTML = '<span class="dot"></span>' + needs.map((n) => HINTS[n].up).join(' · ');
+      el.className = 'need up';
+    } else {
+      el.innerHTML = '<span class="dot"></span>' + HINTS[needs[badIdx]][state[needs[badIdx]]];
+      el.className = 'need down';
+    }
+  });
+  // the fox wakes up
+  if (state['emoji-host'] === 'up') wakeFox();
+}
+
+// ── spark-fox greeter ───────────────────────────────────────────────
+let foxAwake = false;
+async function wakeFox() {
+  if (foxAwake) return;
+  foxAwake = true;
+  try {
+    const raw = await emojiHost.frames();
+    const frames = decodeFrames(raw);
+    if (!frames.length) throw new Error('no frames');
+    const cv = document.createElement('canvas');
+    cv.width = raw.width; cv.height = raw.height;
+    const ctx = cv.getContext('2d');
+    const box = $('fox');
+    box.textContent = '';
+    box.title = 'living emoji — awake';
+    box.appendChild(cv);
+    let i = 0;
+    setInterval(() => { ctx.putImageData(frames[i = (i + 1) % frames.length], 0, 0); }, 160);
+  } catch {
+    foxAwake = false;
+  }
+}
+
+refresh();
+setInterval(refresh, 15000);
+</script>
 </body>
 </html>

@@ -11,6 +11,9 @@ Keep it that way.
   store, chat-ui, composer/(image,audio), mcp, context-budget, prompts,
   presets, system-info, terminal, text, ui, dom, state). Narrow
   contracts, NO page code.
+- `css/` — app shell styles + `flows.css` (shared base for the light
+  flow pages: tokens, dark scheme, header/panel/chat/composer
+  primitives; emoji-studio/pod keep their own dark stage palettes)
 - `flows/` — one file per page (`agent-runs.js`, future: kv-chat,
   emoji-studio), wired via `flows/registry.js`. The chat flow is still
   shell-owned by `app.js` (extraction is future work).
@@ -36,7 +39,12 @@ Keep it that way.
   flow pages (best-of chew capabilities): full-transcript KV chat with
   per-turn cache panel; N-agent debate on named KV sessions; windowed
   chat with context preview. `flows/index.html` is the launcher (header
-  grid icon).
+  grid icon): renders its cards FROM `flows/registry.js` (page flows
+  carry `{icon, blurb, tag, url, needs}` display metadata — add a flow
+  there and it appears) and live-probes capabilities (engine /health,
+  /api/emoji/state, server session) with per-card status hints. Probes
+  use raw fetch — never relayFetch (428 would pop the permission
+  dialog).
 - `atoms/emoji/` — client for the server's `/api/emoji/*` living-emoji
   host (`emojiHost` wrappers + frame/unicode decoders).
 - `server/emoji.ts` — the living-emoji interpreter (spark-fox + nyx-owl):
@@ -78,6 +86,13 @@ Keep it that way.
 ```sh
 python3 -m http.server 8000    # static app
 deno task serve                # full platform on :8787 (PORT env to change)
+deno task hive                 # ONE COMMAND: engine (combs serve, started if
+                               # not healthy) + platform + emoji host dylib —
+                               # server/hive.sh; overrides: COMBS_BIN,
+                               # COMBS_MODEL, COMBS_ENGINE_URL, COMBS_MESH_LIB.
+                               # `deno task hive --new` kills whatever holds
+                               # :8787/:8080 first, then boots fresh. Plain
+                               # `hive` refuses a busy :8787 with a hint.
 deno task check                # server type-check
 deno task test:remote          # combs-remote KV reuse (needs combs serve :8475)
 deno task test:emoji           # emoji host (needs COMBS_MESH_LIB + COMBS_ENGINE_URL)

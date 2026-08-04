@@ -77,13 +77,21 @@ async function serveStatic(pathname: string): Promise<Response> {
     return json({ error: "forbidden" }, { status: 403 });
   }
   try {
-    const data = await Deno.readFile(file);
-    const ext = file.slice(file.lastIndexOf("."));
+    // Directory → its index.html (e.g. /flows/ → flows/index.html).
+    const stat = await Deno.stat(file).catch(() => null);
+    const target = stat?.isDirectory ? `${file.replace(/\/+$/, "")}/index.html` : file;
+    const data = await Deno.readFile(target);
+    const ext = target.slice(target.lastIndexOf("."));
     return new Response(data, {
       headers: { "content-type": MIME[ext] ?? "application/octet-stream" },
     });
   } catch {
-    // SPA fallback
+    // SPA fallback only for navigation requests (no file extension).
+    // Asset misses get a real 404 — never HTML masquerading as CSS/JS.
+    const base = rel.split("/").pop() ?? "";
+    if (base.includes(".")) {
+      return json({ error: "not found" }, { status: 404 });
+    }
     try {
       const data = await Deno.readFile(`${ROOT}index.html`);
       return new Response(data, { headers: { "content-type": MIME[".html"] } });

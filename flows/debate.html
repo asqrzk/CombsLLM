@@ -7,45 +7,28 @@
 <meta charset="utf-8">
 <title>CombsLLM — debate</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/flows.css">
 <style>
-  :root { --bg:#f4f4f5; --panel:#fff; --border:#e4e4e7; --fg:#18181b; --dim:#71717a; --green:#16a34a; --red:#dc2626; --greenbg:#f0fdf4; }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 -apple-system,"Helvetica Neue",sans-serif; }
-  header { padding:12px 20px; border-bottom:1px solid var(--border); background:var(--panel); display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
-  header h1 { font-size:15px; margin:0; }
-  header span { color:var(--dim); font-size:12px; }
-  header a { margin-left:auto; color:var(--dim); font-size:12px; text-decoration:none; }
-  header a:hover { color:var(--fg); }
+  main { max-width:1200px; margin:0 auto; padding:16px 20px; display:flex; flex-direction:column; gap:16px; }
   .chip { padding:2px 10px; border-radius:99px; font-size:11px; border:1px solid var(--border); }
   .chip.pro { color:var(--green); border-color:var(--green); }
   .chip.con { color:var(--red); border-color:var(--red); }
-  main { max-width:1200px; margin:0 auto; padding:16px 20px; display:flex; flex-direction:column; gap:16px; }
-  .panel { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px; }
-  .panel h2 { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin:0 0 10px; }
   #cfg { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; align-items:end; }
   #cfg label { font-size:11px; color:var(--dim); display:flex; flex-direction:column; gap:4px; }
-  #cfg input, #cfg select { border:1px solid var(--border); border-radius:8px; padding:8px 10px; font:inherit; }
-  #cfg button { background:var(--fg); color:#fafafa; border:0; border-radius:8px; padding:9px 16px; font:inherit; cursor:pointer; }
+  #cfg input, #cfg select { border:1px solid var(--border); border-radius:8px; padding:8px 10px; font:inherit; background:var(--panel); color:var(--fg); }
+  #cfg button { background:var(--accent-bg); color:var(--accent-fg); border:0; border-radius:8px; padding:9px 16px; font:inherit; cursor:pointer; }
   #cfg button:disabled { opacity:.4; cursor:wait; }
-  #cfg .ghost { background:#fff; color:var(--fg); border:1px solid var(--border); }
+  #cfg .ghost { background:var(--panel); color:var(--fg); border:1px solid var(--border); }
   #body { display:grid; grid-template-columns:1fr 320px; gap:16px; }
   @media (max-width:900px) { #body { grid-template-columns:1fr; } }
   #transcript { display:flex; flex-direction:column; gap:8px; max-height:56vh; overflow:auto; }
   .turn { max-width:85%; padding:8px 12px; border-radius:12px; font-size:13px; white-space:pre-wrap; }
-  .turn.pro { align-self:flex-start; background:#f4f4f5; border:1px solid var(--border); border-left:3px solid var(--green); }
-  .turn.con { align-self:flex-end; background:#f4f4f5; border:1px solid var(--border); border-right:3px solid var(--red); }
+  .turn.pro { align-self:flex-start; background:var(--bg); border:1px solid var(--border); border-left:3px solid var(--green); }
+  .turn.con { align-self:flex-end; background:var(--bg); border:1px solid var(--border); border-right:3px solid var(--red); }
   .turn .who { font-size:10px; color:var(--dim); margin-bottom:3px; text-transform:uppercase; letter-spacing:.06em; }
   .sys { align-self:center; background:none; border:none; color:var(--dim); font-size:11px; text-align:center; }
-  .cursor { animation:pulse 1s infinite; }
-  @keyframes pulse { 50% { opacity:0; } }
   .stat { padding:7px 0; border-bottom:1px dashed var(--border); font-size:11px; }
-  .stat .row { display:flex; justify-content:space-between; }
-  .stat .badge { padding:1px 8px; border-radius:99px; border:1px solid var(--border); color:var(--dim); }
-  .stat .badge.hot { color:var(--green); border-color:var(--green); background:var(--greenbg); }
-  .stat .badge.warm { color:var(--fg); border-color:var(--fg); }
-  .stat .cap { color:var(--dim); }
-  #setup { max-width:34rem; margin:12vh auto; text-align:center; color:var(--dim); }
-  #setup code { background:#fff; border:1px solid var(--border); border-radius:6px; padding:2px 6px; }
 </style>
 </head>
 <body>

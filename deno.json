@@ -1,6 +1,7 @@
 {
   "tasks": {
     "serve": "deno run --allow-net --allow-read --allow-write --allow-env --allow-ffi server/main.ts",
+    "hive": "bash server/hive.sh",
     "check": "deno check server/main.ts",
     "test:emoji": "deno run --allow-net --allow-read --allow-write --allow-env --allow-ffi tests/test-emoji-host.ts",
     "test:remote": "deno run --location=http://localhost --allow-net --allow-env tests/test-combs-remote.ts"
