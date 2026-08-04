@@ -1,0 +1,40 @@
+# CombsLLM platform — app + engine sidecar.
+#
+# First run:
+#   docker compose build
+#   docker compose run --rm engine combs pull smollm2-360m   # model → shared volume
+#   docker compose up
+# Then open https://<your-domain> (or http://localhost:8787) and create the passkey.
+#
+# GPU: on Linux, combs serve uses wgpu/Vulkan — pass devices through as
+# your runtime requires; without a GPU it still runs (CPU). On macOS
+# Docker there is no Metal passthrough — run the engine natively instead
+# and point COMBS_ENGINE_URL at it.
+services:
+  app:
+    build: .
+    ports:
+      - "8787:8787"
+    environment:
+      # Hosted mode — set these for your domain:
+      # COMBSLLM_RP_ID: "example.com"
+      # COMBSLLM_ORIGINS: "https://example.com,https://run-1.example.com"
+      # COMBSLLM_COOKIE_DOMAIN: ".example.com"
+      COMBS_ENGINE_URL: http://engine:8080
+    volumes:
+      - combs-data:/data
+    depends_on:
+      - engine
+    restart: unless-stopped
+
+  engine:
+    build: . # same image — uses the bundled combs binary
+    command: ["/opt/combs/combs", "serve", "--model", "/data/home/models/smollm2-360m", "--port", "8080"]
+    environment:
+      COMBS_HOME: /data/home
+    volumes:
+      - combs-data:/data
+    restart: unless-stopped
+
+volumes:
+  combs-data:
