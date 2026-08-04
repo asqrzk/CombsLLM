@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en" class="antialiased text-slate-800 bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Text Compactor Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+        }
+        /* Custom Scrollbar for large text areas */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .toast {
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            transform: translateY(20px);
+            opacity: 0;
+            pointer-events: none;
+        }
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+            pointer-events: auto;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col p-4 md:p-8">
+
+    <header class="max-w-7xl mx-auto w-full mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div>
+            <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
+                Deep Text Compactor
+            </h1>
+            <p class="text-sm text-slate-500 mt-1">Compress huge texts by reducing lines, spaces, and redundancies without losing code.</p>
+        </div>
+        <div class="flex gap-3">
+            <button id="btn-clear" class="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-sm">
+                Clear All
+            </button>
+            <button id="btn-compact" class="px-6 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-md flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                Compact Text
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto w-full flex-1 flex flex-col gap-6">
+        <section class="glass-panel p-4 rounded-xl shadow-sm grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <label class="flex items-center gap-2 cursor-pointer group">
+                <input type="checkbox" id="opt-unwrap" checked class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
+                <span class="text-sm font-medium text-slate-700 group-hover:text-indigo-600 transition-colors">Unwrap Paragraphs<br><span class="text-xs text-slate-400 font-normal">Merges single line breaks</span></span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer group">
+                <input type="checkbox" id="opt-repeats" checked class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
+                <span class="text-sm font-medium text-slate-700 group-hover:text-indigo-600 transition-colors">Remove Duplicate Words<br><span class="text-xs text-slate-400 font-normal">e.g., "the the" &rarr; "the"</span></span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer group">
+                <input type="checkbox" id="opt-indented" checked class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
+                <span class="text-sm font-medium text-slate-700 group-hover:text-indigo-600 transition-colors">Preserve Indented Blocks<br><span class="text-xs text-slate-400 font-normal">Protects ASCII diagrams</span></span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer group">
+                <input type="checkbox" id="opt-stopwords" class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
+                <span class="text-sm font-medium text-slate-700 group-hover:text-indigo-600 transition-colors">Remove Stop Words<br><span class="text-xs text-slate-400 font-normal">Aggressive (a, an, the...)</span></span>
+            </label>
+        </section>
+
+        <div class="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[500px]">
+            <!-- Input Area -->
+            <div class="flex flex-col gap-2">
+                <div class="flex justify-between items-end">
+                    <label for="input-text" class="text-sm font-semibold text-slate-700">Original Text</label>
+                    <span id="stats-in" class="text-xs text-slate-500 font-mono">0 lines | 0 chars</span>
+                </div>
+                <textarea id="input-text" placeholder="Paste your massive text (up to 20k+ lines) here..." class="w-full flex-1 p-4 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none glass-panel font-mono text-sm leading-relaxed" spellcheck="false"></textarea>
+            </div>
+
+            <!-- Output Area -->
+            <div class="flex flex-col gap-2">
+                <div class="flex justify-between items-end">
+                    <label for="output-text" class="text-sm font-semibold text-slate-700">Compacted Output</label>
+                    <span id="stats-out" class="text-xs text-slate-500 font-mono">0 lines | 0 chars</span>
+                </div>
+                <div class="relative w-full flex-1 flex flex-col">
+                    <textarea id="output-text" readonly placeholder="Compacted text will appear here..." class="w-full flex-1 p-4 rounded-xl border border-slate-300 bg-slate-50 outline-none resize-none font-mono text-sm leading-relaxed text-slate-700"></textarea>
+                    
+                    <!-- Copy Button Overlay -->
+                    <button id="btn-copy" class="absolute bottom-4 right-4 p-2 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 text-slate-600 transition-all hidden">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reduction Stats Banner -->
+        <div id="savings-banner" class="hidden glass-panel p-4 rounded-xl shadow-sm text-center border-emerald-200 bg-emerald-50/50">
+            <p class="text-emerald-800 font-medium">
+                Successfully compacted! Reduced lines by <span id="save-lines" class="font-bold text-emerald-600 text-lg">0%</span> and characters by <span id="save-chars" class="font-bold text-emerald-600 text-lg">0%</span>.
+            </p>
+        </div>
+    </main>
+
+    <div id="toast" class="toast fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-lg text-sm font-medium flex items-center gap-2 z-50">
+        <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+        Copied to clipboard!
+    </div>
+
+    <script>
+        const els = {
+            input: document.getElementById('input-text'),
+            output: document.getElementById('output-text'),
+            btnCompact: document.getElementById('btn-compact'),
+            btnClear: document.getElementById('btn-clear'),
+            btnCopy: document.getElementById('btn-copy'),
+            statsIn: document.getElementById('stats-in'),
+            statsOut: document.getElementById('stats-out'),
+            savingsBanner: document.getElementById('savings-banner'),
+            saveLines: document.getElementById('save-lines'),
+            saveChars: document.getElementById('save-chars'),
+            toast: document.getElementById('toast'),
+            opts: {
+                unwrap: document.getElementById('opt-unwrap'),
+                repeats: document.getElementById('opt-repeats'),
+                indented: document.getElementById('opt-indented'),
+                stopwords: document.getElementById('opt-stopwords')
+            }
+        };
+
+        // Utility to count stats
+        function getStats(text) {
+            if (!text) return { lines: 0, chars: 0 };
+            const chars = text.length;
+            const lines = text.split('\n').length;
+            return { lines, chars };
+        }
+
+        // Update UI Stats
+        function updateStats(element, stats) {
+            element.textContent = `${stats.lines.toLocaleString()} lines | ${stats.chars.toLocaleString()} chars`;
+        }
+
+        function compactString(text, options) {
+            if (!text) return "";
+
+            let preservedBlocks = [];
+            let preserveCounter = 0;
+
+            // Helper to safely store blocks we don't want to mess up
+            function preserve(match) {
+                const token = `__PRESERVED_BLOCK_${preserveCounter++}__`;
+                preservedBlocks.push({ token, content: match });
+                return token;
+            }
+
+            // 1. Normalize line endings
+            text = text.replace(/\r\n/g, '\n');
+
+            // 2. MASKING (Protecting crucial formatting)
+            // A. Markdown Code Blocks (e.g., ```javascript ... ```)
+            text = text.replace(/```[\s\S]*?```/g, preserve);
+            // B. Inline code (e.g., `const x = 1;`)
+            text = text.replace(/`[^`\n]+`/g, preserve);
+            
+            // C. HTML <pre> tags
+            text = text.replace(/<pre>[\s\S]*?<\/pre>/gi, preserve);
+
+            // D. Optional: Indented text (usually ASCII diagrams or raw code without backticks)
+            // Matches lines starting with at least 4 spaces or a tab.
+            if (options.preserveIndented) {
+                text = text.replace(/(?:^(?: {4}|\t).*(?:\n|$))+/gm, preserve);
+            }
+
+            // 3. COMPACTION (Operating only on safe text)
+            
+            // A. Unwrap Paragraphs (Crucial for line count reduction)
+            // Replaces single newlines (that aren't preceded/followed by newlines) with a space.
+            if (options.unwrapParagraphs) {
+                text = text.replace(/([^\n])\n([^\n])/g, '$1 $2');
+            }
+
+            // B. Remove multiple empty lines (Max 2 newlines = 1 blank line between paragraphs)
+            text = text.replace(/\n{3,}/g, '\n\n');
+
+            // C. Remove Extra Spaces
+            text = text.replace(/[ \t]{2,}/g, ' ');
+
+            // D. Remove Duplicate Words (e.g., "the the")
+            if (options.removeRepeats) {
+                // \b word boundary, \w+ word chars. Checks if followed by space and same word.
+                text = text.replace(/\b([A-Za-z]+)(\s+\1)+\b/gi, '$1');
+            }
+
+            // E. Remove Weak Stop Words (Aggressive compaction)
+            if (options.removeStopWords) {
+                // Conservative list of weak filler words
+                const stopWords = ['a', 'an', 'the', 'is', 'are', 'was', 'were', 'it', 'this', 'that', 'very', 'really'];
+                const stopRegex = new RegExp('\\b(' + stopWords.join('|') + ')\\b\\s*', 'gi');
+                text = text.replace(stopRegex, ' ');
+            }
+
+            // F. Fix Punctuation Formatting (Space before comma, multiple spaces after period)
+            text = text.replace(/\s+([.,!?;:])/g, '$1'); // "hello ," -> "hello,"
+            text = text.replace(/([.,!?;:])(?=[a-zA-Z])/g, '$1 '); // "hello.world" -> "hello. world"
+            
+            // Final trim to clean edges
+            text = text.trim();
+
+            // 4. UNMASKING (Restoring protected code/diagrams)
+            // Reverse order to handle potential nesting (though unlikely in this flow)
+            for (let i = preservedBlocks.length - 1; i >= 0; i--) {
+                const block = preservedBlocks[i];
+                text = text.replace(block.token, block.content);
+            }
+
+            return text;
+        }
+
+        
+        // Handle Compaction
+        els.btnCompact.addEventListener('click', () => {
+            const rawText = els.input.value;
+            if (!rawText.trim()) return;
+
+            // Change button state
+            els.btnCompact.innerHTML = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Processing...`;
+            els.btnCompact.disabled = true;
+
+            // Use setTimeout to allow UI to render the loading state before heavy regex parsing
+            setTimeout(() => {
+                try {
+                    const options = {
+                        unwrapParagraphs: els.opts.unwrap.checked,
+                        removeRepeats: els.opts.repeats.checked,
+                        preserveIndented: els.opts.indented.checked,
+                        removeStopWords: els.opts.stopwords.checked
+                    };
+
+                    const originalStats = getStats(rawText);
+                    const compactedText = compactString(rawText, options);
+                    const newStats = getStats(compactedText);
+
+                    // Update UI
+                    els.output.value = compactedText;
+                    updateStats(els.statsOut, newStats);
+                    els.btnCopy.classList.remove('hidden');
+
+                    // Calculate Savings
+                    const lineSavings = originalStats.lines > 0 ? ((originalStats.lines - newStats.lines) / originalStats.lines * 100).toFixed(1) : 0;
+                    const charSavings = originalStats.chars > 0 ? ((originalStats.chars - newStats.chars) / originalStats.chars * 100).toFixed(1) : 0;
+
+                    els.saveLines.textContent = `${lineSavings}%`;
+                    els.saveChars.textContent = `${charSavings}%`;
+                    els.savingsBanner.classList.remove('hidden');
+
+                } catch (e) {
+                    console.error("Compaction Error:", e);
+                    alert("An error occurred while processing the text.");
+                } finally {
+                    // Restore button
+                    els.btnCompact.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg> Compact Text`;
+                    els.btnCompact.disabled = false;
+                }
+            }, 50); // 50ms delay is enough for the browser to paint the loading button
+        });
+
+        // Input live stats
+        els.input.addEventListener('input', () => {
+            updateStats(els.statsIn, getStats(els.input.value));
+            els.savingsBanner.classList.add('hidden');
+        });
+
+        // Clear All
+        els.btnClear.addEventListener('click', () => {
+            els.input.value = '';
+            els.output.value = '';
+            updateStats(els.statsIn, { lines: 0, chars: 0 });
+            updateStats(els.statsOut, { lines: 0, chars: 0 });
+            els.btnCopy.classList.add('hidden');
+            els.savingsBanner.classList.add('hidden');
+            els.input.focus();
+        });
+
+        // Copy to clipboard functionality
+        let toastTimeout;
+        els.btnCopy.addEventListener('click', () => {
+            if (!els.output.value) return;
+
+            // Fallback for iFrame restrictions
+            els.output.select();
+            document.execCommand('copy');
+            
+            // Try modern clipboard API if available
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(els.output.value).catch(err => console.log('Clipboard API failed', err));
+            }
+
+            // Show toast
+            els.toast.classList.add('show');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                els.toast.classList.remove('show');
+            }, 2500);
+            
+            // Clear selection
+            window.getSelection().removeAllRanges();
+        });
+    </script>
+</body>
+</html>

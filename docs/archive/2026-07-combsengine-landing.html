@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Combs Engine | Local-first AI inference</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;450;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com">
+    </script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        background: '#050508',
+                        surface: '#111115',
+                        surface2: '#1a1a20',
+                        surface3: '#22222a',
+                        border: 'rgba(255, 255, 255, 0.10)',
+                        borderVisible: 'rgba(255, 255, 255, 0.14)',
+                        borderHover: 'rgba(255, 255, 255, 0.22)',
+                        primary: '#f4f4f6',
+                        muted: '#b0b0ba',
+                        mutedLight: '#c8c8d2',
+                        accent: '#e8e8ed',
+                        accentWarm: '#f0ebe4',
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'fade-in': 'fadeIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                        'slide-up': 'slideUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                        slideUp: {
+                            '0%': { opacity: '0', transform: 'translateY(28px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        },
+                    },
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --bg: #050508;
+            --surface: #111115;
+            --surface2: #1a1a20;
+            --surface3: #22222a;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: #f4f4f6;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            overflow-x: hidden;
+            font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+        }
+
+        /* Ambient glow orbs */
+        .ambient-glow-top {
+            position: fixed;
+            top: -15vh;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90vw;
+            height: 60vh;
+            background: radial-gradient(ellipse at center,
+                    rgba(180, 180, 200, 0.06) 0%,
+                    rgba(100, 100, 140, 0.02) 35%,
+                    rgba(0, 0, 0, 0) 65%);
+            pointer-events: none;
+            z-index: -1;
+            filter: blur(100px);
+        }
+
+        .ambient-glow-warm {
+            position: absolute;
+            bottom: 10%;
+            right: -10%;
+            width: 50vw;
+            height: 50vh;
+            background: radial-gradient(ellipse at center,
+                    rgba(200, 170, 140, 0.05) 0%,
+                    rgba(160, 130, 100, 0.015) 40%,
+                    rgba(0, 0, 0, 0) 70%);
+            pointer-events: none;
+            z-index: -1;
+            filter: blur(90px);
+        }
+
+        /* Gradient Text — high contrast */
+        .text-gradient {
+            background: linear-gradient(180deg, #ffffff 0%, #d4d4dc 55%, #b8b8c2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .text-gradient-subtle {
+            background: linear-gradient(90deg, #c8c8d2 0%, #a8a8b4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Navbar */
+        .nav-glass {
+            background: rgba(8, 8, 14, 0.7);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        /* Bento Cards — unified */
+        .bento-card {
+            background: var(--surface);
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            border-radius: 1.25rem;
+            padding: 1.75rem;
+            transition: all 0.35s cubic-bezier(0.22, 0.61, 0.36, 1);
+            position: relative;
+            overflow: hidden;
+            cursor: default;
+        }
+
+        .bento-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(700px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+                    rgba(255, 255, 255, 0.05),
+                    transparent 45%);
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .bento-card:hover {
+            border-color: rgba(255, 255, 255, 0.20);
+            transform: translateY(-3px);
+            box-shadow: 0 24px 48px -20px rgba(0, 0, 0, 0.7),
+                0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+        }
+
+        .bento-card:hover::before {
+            opacity: 1;
+        }
+
+        .bento-card>* {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Highlighted card variant */
+        .bento-card-highlight {
+            border-color: rgba(255, 255, 255, 0.18);
+            box-shadow: 0 0 40px rgba(200, 200, 220, 0.04),
+                0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+        }
+        .bento-card-highlight:hover {
+            border-color: rgba(255, 255, 255, 0.28);
+            box-shadow: 0 24px 48px -20px rgba(0, 0, 0, 0.7),
+                0 0 50px rgba(200, 200, 220, 0.06),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+        }
+
+        /* Stack layer card */
+        .layer-card {
+            background: var(--surface);
+            border: 1px solid rgba(255, 255, 255, 0.09);
+            border-radius: 1rem;
+            padding: 1.25rem 1.5rem;
+            transition: all 0.3s cubic-bezier(0.22, 0.61, 0.36, 1);
+            cursor: default;
+            position: relative;
+        }
+        .layer-card:hover {
+            border-color: rgba(255, 255, 255, 0.18);
+            background: var(--surface2);
+            transform: translateX(2px);
+        }
+        .layer-card.layer-core {
+            border-color: rgba(255, 255, 255, 0.16);
+            background: var(--surface2);
+            box-shadow: 0 0 36px rgba(200, 200, 220, 0.04);
+        }
+        .layer-card.layer-core:hover {
+            border-color: rgba(255, 255, 255, 0.26);
+            box-shadow: 0 0 48px rgba(200, 200, 220, 0.07);
+        }
+
+        /* Terminal */
+        .terminal {
+            background: #0a0a0f;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 32px 64px rgba(0, 0, 0, 0.7);
+        }
+        .terminal-header {
+            background: #14141a;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 12px 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .dot {
+            width: 11px;
+            height: 11px;
+            border-radius: 50%;
+        }
+        .dot-red {
+            background-color: #ff5f56;
+        }
+        .dot-yel {
+            background-color: #ffbd2e;
+        }
+        .dot-grn {
+            background-color: #27c93f;
+        }
+
+        .cursor {
+            display: inline-block;
+            width: 7px;
+            height: 1.15em;
+            background-color: #e4e4e8;
+            vertical-align: middle;
+            margin-left: 3px;
+            border-radius: 1px;
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink {
+            0%,
+            100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0;
+            }
+        }
+
+        /* Scroll Reveal */
+        .reveal {
+            opacity: 0;
+            transform: translateY(32px);
+            transition: all 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .reveal.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Grid Pattern */
+        .bg-grid {
+            position: fixed;
+            inset: 0;
+            background-size: 44px 44px;
+            background-image:
+                linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+            mask-image: linear-gradient(to bottom, black 15%, transparent 75%);
+            -webkit-mask-image: linear-gradient(to bottom, black 15%, transparent 75%);
+            z-index: -3;
+            pointer-events: none;
+        }
+
+        /* Table */
+        .table-row {
+            transition: background 0.2s ease;
+        }
+        .table-row:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        /* Selection */
+        ::selection {
+            background: rgba(220, 220, 240, 0.25);
+            color: #ffffff;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.12);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.20);
+        }
+
+        @media (max-width: 640px) {
+            .bento-card {
+                padding: 1.25rem;
+                border-radius: 1rem;
+            }
+            .layer-card {
+                padding: 1rem 1.15rem;
+                border-radius: 0.85rem;
+            }
+            .terminal {
+                border-radius: 10px;
+            }
+        }
+    </style>
+</head>
+<body class="relative min-h-screen">
+
+    <div class="ambient-glow-top"></div>
+    <div class="bg-grid"></div>
+
+    <!-- Navigation -->
+    <nav class="fixed top-0 left-0 right-0 z-50 nav-glass">
+        <div class="max-w-6xl mx-auto px-5 sm:px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-7 h-7 bg-white text-black rounded-md flex items-center justify-center font-bold text-sm shadow-[0_0_12px_rgba(255,255,255,0.15)]">
+                    <img src="logo.png" alt="CombsEngine Logo" class="w-4 h-4">
+                </div>
+                <span class="font-semibold text-[15px] tracking-tight text-primary">CombsEngine</span>
+            </div>
+            <div class="hidden md:flex items-center gap-8 text-sm font-medium">
+                <a href="#architecture" class="text-muted hover:text-primary transition-colors duration-200">Architecture</a>
+                <a href="#ecosystem" class="text-muted hover:text-primary transition-colors duration-200">Framework</a>
+                <a href="#performance" class="text-muted hover:text-primary transition-colors duration-200">Performance</a>
+            </div>
+            <div class="flex items-center gap-5">
+                <a href="https://github.com/asqrzk/CombsEngine" target="_blank"
+                class="text-sm font-medium text-mutedLight hover:text-primary transition-colors duration-200 flex items-center gap-1.5">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                GitHub
+            </a>
+        </div>
+    </div>
+</nav>
+
+<main class="pt-36 pb-20 px-5 sm:px-6 max-w-6xl mx-auto">
+    <!-- Hero -->
+    <div class="flex flex-col items-center text-center max-w-4xl mx-auto reveal active">
+        <a href="https://github.com/asqrzk/CombsEngine" target="_blank"
+        class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-border bg-surface/80 text-sm font-medium text-mutedLight mb-8 hover:bg-surface2 hover:border-borderVisible transition-all duration-300">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse-slow shadow-[0_0_8px_rgba(52,211,153,0.5)]"></span>
+        Local-first AI inference
+    </a>
+
+    <h1 class="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tighter leading-[1.08] mb-6 text-gradient">
+        One Rust GPU core.<br/>Everywhere.
+    </h1>
+
+    <p class="text-base sm:text-lg md:text-xl text-mutedLight max-w-2xl mb-10 leading-relaxed font-[420]">
+        Run large language models on-device with a single Rust core compiled for macOS, iOS, Android, Linux, Windows, and Web. Exposes a C ABI to a full TypeScript agent framework.
+    </p>
+
+    <div class="flex flex-col sm:flex-row items-center gap-4 w-full justify-center">
+        <a href="https://github.com/asqrzk/CombsEngine" target="_blank"
+        class="w-full sm:w-auto px-6 py-3 bg-white text-black rounded-lg font-semibold hover:scale-[1.03] transition-all duration-300 flex items-center justify-center gap-2 shadow-[0_0_24px_rgba(255,255,255,0.18)] hover:shadow-[0_0_32px_rgba(255,255,255,0.25)]">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
+        View Repository
+    </a>
+    <a href="#cli"
+    class="w-full sm:w-auto px-6 py-3 bg-surface border border-borderVisible text-primary rounded-lg font-medium hover:bg-surface2 hover:border-borderHover transition-all duration-300 flex items-center justify-center">
+    Explore Stack
+</a>
+</div>
+</div>
+
+<!-- Terminal -->
+<div id="cli" class="mt-20 max-w-3xl mx-auto reveal">
+    <div class="terminal">
+        <div class="terminal-header">
+            <div class="dot dot-red"></div>
+            <div class="dot dot-yel"></div>
+            <div class="dot dot-grn"></div>
+            <div class="ml-3 text-xs font-mono text-muted tracking-wide">bash — combs-cli</div>
+        </div>
+        <div class="p-5 sm:p-6 font-mono text-sm leading-relaxed h-[340px] overflow-y-auto bg-[#08080d]" id="terminal-content">
+            <!-- JS Injected -->
+        </div>
+    </div>
+</div>
+</main>
+
+<!-- Architecture Section -->
+<section id="architecture" class="py-24 border-t border-border relative">
+    <div class="ambient-glow-warm" style="top:15%;right:-8%;width:45vw;height:40vh;opacity:0.7;"></div>
+    <div class="max-w-6xl mx-auto px-5 sm:px-6 relative z-10">
+        <div class="mb-16 reveal">
+            <h2 class="text-3xl font-bold tracking-tight mb-4 text-primary">The Stack</h2>
+            <p class="text-mutedLight text-lg max-w-2xl font-[420] leading-relaxed">Compute lives exclusively in L0 — every layer above is thin orchestration over the same highly-optimized engine.</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Stack Layers -->
+            <div class="flex flex-col gap-3 reveal">
+
+                <div class="layer-card">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <h3 class="font-mono text-sm font-semibold text-primary">L3 — Platform Shells</h3>
+                        <span class="text-[11px] text-muted font-mono tracking-wide">UI / Wrappers</span>
+                    </div>
+                    <p class="text-sm text-muted leading-relaxed">Svelte 5 UI template · Android (JNI/Kotlin) · iOS (Swift) · Web Worker transport</p>
+                </div>
+
+                <div class="layer-card">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <h3 class="font-mono text-sm font-semibold text-primary">L2 — Deno / TypeScript Framework</h3>
+                        <span class="text-[11px] text-muted font-mono tracking-wide">Engine/Js</span>
+                    </div>
+                    <p class="text-sm text-muted leading-relaxed">@combs/core · @combs/graph · @combs/agents · @combs/runtime · @combs/flows</p>
+                </div>
+
+                <div class="layer-card">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <h3 class="font-mono text-sm font-semibold text-primary">L1 — C ABI / JSON-FFI</h3>
+                        <span class="text-[11px] text-muted font-mono tracking-wide">combs-ffi</span>
+                    </div>
+                    <p class="text-sm text-muted leading-relaxed">combs_engine_create · combs_chat_completion_stream · OpenAI-compatible server</p>
+                </div>
+
+                <div class="layer-card layer-core">
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="font-mono text-base font-bold text-primary">L0 — Rust GPU Core</h3>
+                        <span class="text-[11px] text-primary font-mono bg-white/10 px-2 py-0.5 rounded tracking-wide">Engine/Core</span>
+                    </div>
+                    <p class="text-sm text-mutedLight leading-relaxed">Burn 0.21 · CubeCL · wgpu (Metal/Vulkan/DX12/WebGPU) · Paged KV cache · full sampler · GGUF/SafeTensors</p>
+                </div>
+            </div>
+
+            <!-- Feature Cards -->
+            <div class="grid grid-cols-1 gap-5 reveal" style="transition-delay: 0.1s;">
+                <div class="bento-card">
+                    <h3 class="text-lg font-semibold mb-3 text-primary">Memory & Execution</h3>
+                    <p class="text-mutedLight text-sm mb-5 leading-relaxed font-[420]">
+                        Engineered for minimal overhead. Features a custom paged KV cache (page-16 arenas, LIFO free-list, prefix-safe popn), chunked prefill, and quantized linear layers with weights packed directly in VRAM.
+                    </p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="px-2.5 py-1 bg-surface3 border border-border rounded-md text-xs font-mono text-mutedLight">KV Cache</span>
+                        <span class="px-2.5 py-1 bg-surface3 border border-border rounded-md text-xs font-mono text-mutedLight">Chunked Prefill</span>
+                        <span class="px-2.5 py-1 bg-surface3 border border-border rounded-md text-xs font-mono text-mutedLight">Metal/Vulkan/DX12</span>
+                    </div>
+                </div>
+                <div class="bento-card">
+                    <h3 class="text-lg font-semibold mb-3 text-primary">Model Source Adapters</h3>
+                    <p class="text-mutedLight text-sm leading-relaxed mb-4 font-[420]">
+                        Llama-family architectures validated with SmolLM2. Load SafeTensors (HF layout) or GGUF v3 directly via a single <code class="text-primary bg-surface3 px-1.5 py-0.5 rounded text-xs font-mono">ModelSource</code> adapter trait. <code class="text-primary bg-surface3 px-1.5 py-0.5 rounded text-xs font-mono">combs run --model anything.gguf</code> just works.
+                    </p>
+                    <ul class="space-y-2 text-sm">
+                        <li class="flex items-center gap-2 text-mutedLight"><span class="text-emerald-400 font-bold">✓</span> GGUF — F32 / F16 / Q8_0 / Q4_0</li>
+                        <li class="flex items-center gap-2 text-mutedLight"><span class="text-emerald-400 font-bold">✓</span> SafeTensors (HF layout)</li>
+                        <li class="flex items-center gap-2 text-muted"><span class="text-amber-400/70 font-bold">🚧</span> GGUF — K-quants <span class="text-[11px] text-muted ml-1">(Planned)</span></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Ecosystem Section -->
+<section id="ecosystem" class="py-24 border-t border-border">
+    <div class="max-w-6xl mx-auto px-5 sm:px-6">
+        <div class="mb-16 reveal">
+            <h2 class="text-3xl font-bold tracking-tight mb-4 text-primary">L2 TypeScript Framework</h2>
+            <p class="text-mutedLight text-lg max-w-2xl font-[420] leading-relaxed">A complete Deno ecosystem built on top of the Combs C ABI, abstracting infrastructure while keeping native performance.</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="bento-card reveal">
+                <h4 class="font-mono text-sm font-semibold text-primary mb-2">@combs/core</h4>
+                <p class="text-sm text-mutedLight leading-relaxed font-[420]"><code class="text-primary bg-surface3 px-1 py-0.5 rounded text-xs font-mono">Combs.init("smollm2-135m")</code> — presets, model cache, device planner, FFI / Remote / Worker engines.</p>
+            </div>
+            <div class="bento-card reveal" style="transition-delay: 0.06s;">
+                <h4 class="font-mono text-sm font-semibold text-primary mb-2">@combs/graph</h4>
+                <p class="text-sm text-mutedLight leading-relaxed font-[420]">LangGraph-equivalent: StateGraph, channels, Pregel runner, checkpointers (Deno KV/SQLite), human-in-the-loop.</p>
+            </div>
+            <div class="bento-card reveal" style="transition-delay: 0.12s;">
+                <h4 class="font-mono text-sm font-semibold text-primary mb-2">@combs/agents</h4>
+                <p class="text-sm text-mutedLight leading-relaxed font-[420]">Tools & ToolNode, ReAct agents, structured output, memory, MCP client, skills loader.</p>
+            </div>
+            <div class="bento-card reveal">
+                <h4 class="font-mono text-sm font-semibold text-primary mb-2">@combs/runtime</h4>
+                <p class="text-sm text-mutedLight leading-relaxed font-[420]">Agent HTTP/WS servers, orchestrator, agent pool, KV task queue, session stores.</p>
+            </div>
+            <div class="bento-card reveal" style="transition-delay: 0.06s;">
+                <h4 class="font-mono text-sm font-semibold text-primary mb-2">@combs/flows</h4>
+                <p class="text-sm text-mutedLight leading-relaxed font-[420]"><code class="text-primary bg-surface3 px-1 py-0.5 rounded text-xs font-mono">createWorkflow</code> (steps/loops/checks), <code class="text-primary bg-surface3 px-1 py-0.5 rounded text-xs font-mono">createRoleplayChat</code>, <code class="text-primary bg-surface3 px-1 py-0.5 rounded text-xs font-mono">addMemory</code>.</p>
+            </div>
+            <div class="bento-card reveal" style="transition-delay: 0.12s;">
+                <h4 class="font-mono text-sm font-semibold text-primary mb-2">@combs/telemetry</h4>
+                <p class="text-sm text-mutedLight leading-relaxed font-[420]">Scoped logging, OpenTelemetry-shaped spans, metrics observability.</p>
+            </div>
+        </div>
+
+        <div class="mt-12 p-[1px] rounded-2xl bg-gradient-to-r from-borderVisible via-border to-transparent reveal">
+            <div class="p-6 sm:p-8 rounded-[15px] bg-surface flex flex-col md:flex-row items-center justify-between gap-6">
+                <div>
+                    <h3 class="text-xl font-bold mb-2 flex items-center gap-3 text-primary flex-wrap">
+                        UI Scaffolding via <span class="font-mono text-sm px-2.5 py-1 bg-surface3 rounded-md text-primary border border-border">combs chew</span>
+                    </h3>
+                    <p class="text-mutedLight font-[420] text-sm max-w-xl leading-relaxed">
+                        Interactive CLI tool that stamps out a ready-to-build Svelte 5 app complete with Ed25519 auth, fine-grained network/storage permissions, and realtime network monitors.
+                    </p>
+                </div>
+                <div class="shrink-0">
+                    <code class="text-sm font-mono text-mutedLight bg-[#0a0a10] px-4 py-3 rounded-lg border border-border block">
+                        $ combs chew chat-ui my-app --yes
+                    </code>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Performance Section -->
+<section id="performance" class="py-24 border-t border-border relative">
+    <div class="ambient-glow-warm" style="top:30%;right:-5%;width:40vw;height:45vh;opacity:0.8;"></div>
+    <div class="max-w-6xl mx-auto px-5 sm:px-6 grid grid-cols-1 lg:grid-cols-2 gap-16 relative z-10">
+        <!-- Performance Metrics -->
+        <div class="reveal">
+            <h2 class="text-3xl font-bold tracking-tight mb-4 text-primary">Performance</h2>
+            <p class="text-mutedLight text-lg mb-8 font-[420] leading-relaxed">Measured on Apple Silicon (wgpu → Metal) running SmolLM2-135M-Instruct.</p>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bento-card p-5 flex flex-col justify-center">
+                    <div class="text-[11px] text-muted font-mono mb-1.5 uppercase tracking-wider">Decode</div>
+                    <div class="text-4xl font-light text-primary flex items-baseline gap-1.5">
+                        ~35 <span class="text-base text-muted font-normal">tok/s</span>
+                    </div>
+                </div>
+                <div class="bento-card bento-card-highlight p-5 flex flex-col justify-center">
+                    <div class="text-[11px] text-mutedLight font-mono mb-1.5 uppercase tracking-wider">Prefill <span class="text-[10px] text-muted normal-case tracking-normal">(1261-tok)</span></div>
+                    <div class="text-4xl font-medium text-primary flex items-baseline gap-1.5">
+                        ~660 <span class="text-base text-muted font-normal">tok/s</span>
+                    </div>
+                </div>
+                <div class="bento-card p-5 flex flex-col justify-center">
+                    <div class="text-[11px] text-muted font-mono mb-1.5 uppercase tracking-wider">TTFT</div>
+                    <div class="text-4xl font-light text-primary flex items-baseline gap-1.5">
+                        ~200 <span class="text-base text-muted font-normal">ms</span>
+                    </div>
+                </div>
+                <div class="bento-card p-5 flex flex-col justify-center">
+                    <div class="text-[11px] text-muted font-mono mb-1.5 uppercase tracking-wider">FFI Streaming</div>
+                    <div class="text-4xl font-light text-primary flex items-baseline gap-1.5">
+                        ~31 <span class="text-base text-muted font-normal">tok/s</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Platform Matrix -->
+        <div class="reveal" style="transition-delay: 0.1s;">
+            <h2 class="text-3xl font-bold tracking-tight mb-4 text-primary">Platform Matrix</h2>
+            <p class="text-mutedLight text-lg mb-8 font-[420] leading-relaxed"><code class="text-primary bg-surface3 px-1.5 py-0.5 rounded text-sm font-mono">cargo xtask bundle</code> produces dist artifacts for every target.</p>
+
+            <div class="bento-card p-0 overflow-hidden">
+                <table class="w-full text-sm text-left">
+                    <thead class="text-[11px] text-muted font-mono uppercase tracking-wider bg-surface2/60 border-b border-border">
+                        <tr>
+                            <th class="px-5 py-3.5 font-medium">Target</th>
+                            <th class="px-5 py-3.5 font-medium">Artifact</th>
+                            <th class="px-5 py-3.5 font-medium">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-border">
+                        <tr class="table-row">
+                            <td class="px-5 py-3.5 text-primary font-medium">macOS (arm64 / x86_64)</td>
+                            <td class="px-5 py-3.5 font-mono text-mutedLight text-xs">dylib</td>
+                            <td class="px-5 py-3.5"><span class="text-emerald-400 font-medium text-xs">✓ Built & tested</span></td>
+                        </tr>
+                        <tr class="table-row">
+                            <td class="px-5 py-3.5 text-primary font-medium">iOS (arm64)</td>
+                            <td class="px-5 py-3.5 font-mono text-mutedLight text-xs">.a</td>
+                            <td class="px-5 py-3.5"><span class="text-emerald-400 font-medium text-xs">✓ Builds</span></td>
+                        </tr>
+                        <tr class="table-row">
+                            <td class="px-5 py-3.5 text-primary font-medium">Android (arm64)</td>
+                            <td class="px-5 py-3.5 font-mono text-mutedLight text-xs">.so</td>
+                            <td class="px-5 py-3.5"><span class="text-emerald-400 font-medium text-xs">✓ Builds (NDK)</span></td>
+                        </tr>
+                        <tr class="table-row">
+                            <td class="px-5 py-3.5 text-primary font-medium">Linux / Windows</td>
+                            <td class="px-5 py-3.5 font-mono text-muted text-xs">—</td>
+                            <td class="px-5 py-3.5 text-mutedLight text-xs">✓ cargo check clean</td>
+                        </tr>
+                        <tr class="table-row">
+                            <td class="px-5 py-3.5 text-primary font-medium">Web (wasm32)</td>
+                            <td class="px-5 py-3.5 font-mono text-muted text-xs">—</td>
+                            <td class="px-5 py-3.5 text-muted text-xs">🚧 skeleton</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Footer -->
+<footer class="border-t border-border bg-background pt-16 pb-8">
+    <div class="max-w-6xl mx-auto px-5 sm:px-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-10 mb-12">
+        <div class="sm:col-span-2">
+            <div class="flex items-center gap-2 mb-4">
+                <div class="w-6 h-6 rounded-md bg-white text-black flex items-center justify-center font-bold text-sm shadow-[0_0_10px_rgba(255,255,255,0.12)]"><img src="logo.png" class="w-6 h-6"></div>
+                <span class="font-semibold tracking-tight text-primary">CombsEngine</span>
+            </div>
+            <p class="text-sm text-mutedLight max-w-sm mb-6 font-[420] leading-relaxed">
+                Local-first AI inference engine + agent framework. One Rust GPU core, everywhere.
+            </p>
+            <div class="text-xs text-muted font-mono">
+                MIT License © Combs Engine contributors.
+            </div>
+        </div>
+
+        <div>
+            <h4 class="font-semibold text-primary mb-4 text-sm">Ecosystem</h4>
+            <ul class="space-y-3 text-sm text-mutedLight font-[420]">
+                <li><a href="https://github.com/asqrzk/CombsEngine" class="hover:text-primary transition-colors duration-200">Engine Core (Rust)</a></li>
+                <li><a href="https://github.com/asqrzk/CombsEngine" class="hover:text-primary transition-colors duration-200">TypeScript Framework</a></li>
+                <li><a href="https://github.com/asqrzk/CombsEngine" class="hover:text-primary transition-colors duration-200">UI Scaffolder (Svelte)</a></li>
+            </ul>
+        </div>
+
+        <div>
+            <h4 class="font-semibold text-primary mb-4 text-sm">Project</h4>
+            <ul class="space-y-3 text-sm text-mutedLight font-[420]">
+                <li><a href="https://github.com/asqrzk/CombsEngine" target="_blank" class="hover:text-primary transition-colors duration-200">GitHub Repository</a></li>
+                <li><a href="https://github.com/asqrzk/CombsEngine/issues" target="_blank" class="hover:text-primary transition-colors duration-200">Issue Tracker</a></li>
+                <li><a href="https://github.com/asqrzk/CombsEngine/blob/main/AGENTS.md" target="_blank" class="hover:text-primary transition-colors duration-200">AGENTS.md</a></li>
+            </ul>
+        </div>
+    </div>
+</footer>
+
+<script>
+    // ── Terminal Typing Simulation ────────────────────────────
+    const terminalData = [
+        { type: 'comment', text: '# Build the CLI orchestrator' },
+        { type: 'input', text: 'cargo xtask build --release' },
+        { type: 'output', text: '    Finished release [optimized] target(s) in 0.12s' },
+        { type: 'empty' },
+        { type: 'comment', text: '# Run a model (HF directory or .gguf file)' },
+        { type: 'input', text: 'combs run --model smollm2-135m --chat' },
+        { type: 'output', text: '⠋ Loading model... [GGUF Q4_0]' },
+        { type: 'output', text: '✓ Ready. TTFT: 198ms | Backend: Metal | Paged KV Active' },
+        { type: 'output', text: 'User: > Hello!' },
+        { type: 'output', text: 'Assistant: Hi there! How can I help you locally today?' },
+        { type: 'empty' },
+        { type: 'comment', text: '# Scaffold a full Svelte 5 chat UI with auth' },
+        { type: 'input', text: 'combs chew chat-ui my-app --yes' },
+        { type: 'output', text: '✓ Scaffolded Svelte 5 UI' },
+        { type: 'output', text: '🔐 Generated Ed25519 keypair auth ritual' },
+        { type: 'empty' },
+        { type: 'comment', text: '# Serve an OpenAI-compatible API' },
+        { type: 'input', text: 'combs serve --model smollm2-135m --port 11434' },
+        { type: 'output', text: '🚀 Server listening on http://127.0.0.1:11434' },
+    ];
+
+    const termContainer = document.getElementById('terminal-content');
+    let lineIdx = 0;
+    let isTyping = false;
+
+    function renderTerminalLine(data, callback) {
+        const line = document.createElement('div');
+        line.className = 'mb-0.5';
+        termContainer.appendChild(line);
+
+        if (data.type === 'empty') {
+            line.innerHTML = '&nbsp;';
+            callback();
+        } else if (data.type === 'comment') {
+            line.innerHTML = `<span class="text-[#888894]">${data.text}</span>`;
+            termContainer.scrollTop = termContainer.scrollHeight;
+            setTimeout(callback, 180);
+        } else if (data.type === 'output') {
+            line.innerHTML = `<span class="text-[#d8d8e0]">${data.text}</span>`;
+            termContainer.scrollTop = termContainer.scrollHeight;
+            setTimeout(callback, 220);
+        } else if (data.type === 'input') {
+            line.innerHTML = `
+                    <span class="text-[#a0d0a0] mr-2 select-none">$</span>
+                    <span class="cmd text-[#e8e8ee]"></span>
+                    <span class="cursor"></span>
+                `;
+            const cmd = line.querySelector('.cmd');
+            const cursor = line.querySelector('.cursor');
+
+            let charIdx = 0;
+
+            function typeChar() {
+                if (charIdx < data.text.length) {
+                    cmd.textContent += data.text[charIdx];
+                    charIdx++;
+                    termContainer.scrollTop = termContainer.scrollHeight;
+                    const delay = data.text[charIdx - 1] === ' ' ? 35 : 18 + Math.random() * 30;
+                    setTimeout(typeChar, delay);
+                } else {
+                    cursor.remove();
+                    setTimeout(callback, 280);
+                }
+            }
+            typeChar();
+        }
+    }
+
+    function runTerminal() {
+        if (isTyping) return;
+        isTyping = true;
+        termContainer.innerHTML = '';
+        lineIdx = 0;
+
+        function processNext() {
+            if (lineIdx < terminalData.length) {
+                renderTerminalLine(terminalData[lineIdx], () => {
+                    lineIdx++;
+                    setTimeout(processNext, 80);
+                });
+            } else {
+                isTyping = false;
+                setTimeout(() => {
+                    runTerminal();
+                }, 5500);
+            }
+        }
+        processNext();
+    }
+
+    setTimeout(runTerminal, 600);
+
+    // ── Scroll Reveal ─────────────────────────────────────────
+    const revealElements = document.querySelectorAll('.reveal');
+
+    const revealObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('active');
+                revealObserver.unobserve(entry.target);
+            }
+        });
+    }, {
+        threshold: 0.08,
+        rootMargin: "0px 0px -40px 0px"
+    });
+
+    revealElements.forEach(el => revealObserver.observe(el));
+
+    // ── Bento Card Mouse Glow ─────────────────────────────────
+    document.querySelectorAll('.bento-card').forEach(card => {
+        card.addEventListener('mousemove', e => {
+            const rect = card.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            card.style.setProperty('--mouse-x', `${x}px`);
+            card.style.setProperty('--mouse-y', `${y}px`);
+        });
+        card.addEventListener('mouseleave', () => {
+            card.style.setProperty('--mouse-x', '50%');
+            card.style.setProperty('--mouse-y', '50%');
+        });
+    });
+
+    // ── Smooth scroll for anchor links ────────────────────────
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function(e) {
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target) {
+                e.preventDefault();
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
+    });
+
+    // ── Initial reveal for elements already in view ───────────
+    window.addEventListener('load', () => {
+        revealElements.forEach(el => {
+            const rect = el.getBoundingClientRect();
+            if (rect.top < window.innerHeight) {
+                el.classList.add('active');
+            }
+        });
+    });
+</script>
+</body>
+</html>
