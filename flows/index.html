@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<!-- flows launcher — the best-of capability pages, connected to atoms. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CombsLLM — flows</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#f4f4f5; --panel:#fff; --border:#e4e4e7; --fg:#18181b; --dim:#71717a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 -apple-system,"Helvetica Neue",sans-serif; }
+  header { padding:12px 20px; border-bottom:1px solid var(--border); background:var(--panel); display:flex; align-items:baseline; gap:12px; }
+  header h1 { font-size:15px; margin:0; }
+  header span { color:var(--dim); font-size:12px; }
+  header a { margin-left:auto; color:var(--dim); font-size:12px; text-decoration:none; }
+  header a:hover { color:var(--fg); }
+  main { max-width:960px; margin:0 auto; padding:24px 20px; display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:18px; text-decoration:none; color:inherit; transition:box-shadow .15s; display:block; }
+  .card:hover { box-shadow:0 4px 16px rgba(0,0,0,.08); }
+  .card h2 { font-size:15px; margin:0 0 6px; }
+  .card p { font-size:12px; color:var(--dim); margin:0; }
+  .card .tag { display:inline-block; font-size:10px; color:var(--dim); border:1px solid var(--border); border-radius:99px; padding:1px 8px; margin-top:10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>CombsLLM flows</h1>
+  <span>capability pages — atoms connected into flows</span>
+  <a href="/">← app</a>
+</header>
+<main>
+  <a class="card" href="/flows/kv-chat.html">
+    <h2>⚡ KV chat</h2>
+    <p>Full-transcript chat on the engine's rolling-session KV prefix reuse, with a per-turn cache-hit panel.</p>
+    <span class="tag">combs serve</span>
+  </a>
+  <a class="card" href="/flows/debate.html">
+    <h2>🗣 Debate</h2>
+    <p>Agents argue a motion — each on its own named KV session. Chat-native history, anti-parrot sampling, per-turn cache stats.</p>
+    <span class="tag">combs serve</span>
+  </a>
+  <a class="card" href="/flows/multi-turn.html">
+    <h2>🪟 Multi-turn</h2>
+    <p>Sliding-window context with a live preview of exactly what the model sees next. The windowed contrast to KV chat.</p>
+    <span class="tag">combs serve</span>
+  </a>
+  <a class="card" href="/flows/emoji-studio.html">
+    <h2>✨ Emoji studio</h2>
+    <p>Living CombsMesh emojis — persona chat, emotions/lifecycle/todos in the artifact, version chain with time-travel.</p>
+    <span class="tag">server + mesh FFI</span>
+  </a>
+  <a class="card" href="/">
+    <h2>💬 App chat</h2>
+    <p>The main app: on-device LiteRT/MediaPipe models, vision+audio, agent runs with MCP tools.</p>
+    <span class="tag">on-device</span>
+  </a>
+</main>
+</body>
+</html>

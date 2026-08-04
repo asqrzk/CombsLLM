@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<!-- debate flow — N agents debate a motion, each on its OWN named KV
+     session (session_id = agent name). Chat-native history keeps every
+     agent's prefix reusable; per-turn cache stats prove it. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CombsLLM — debate</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#f4f4f5; --panel:#fff; --border:#e4e4e7; --fg:#18181b; --dim:#71717a; --green:#16a34a; --red:#dc2626; --greenbg:#f0fdf4; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 -apple-system,"Helvetica Neue",sans-serif; }
+  header { padding:12px 20px; border-bottom:1px solid var(--border); background:var(--panel); display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+  header h1 { font-size:15px; margin:0; }
+  header span { color:var(--dim); font-size:12px; }
+  header a { margin-left:auto; color:var(--dim); font-size:12px; text-decoration:none; }
+  header a:hover { color:var(--fg); }
+  .chip { padding:2px 10px; border-radius:99px; font-size:11px; border:1px solid var(--border); }
+  .chip.pro { color:var(--green); border-color:var(--green); }
+  .chip.con { color:var(--red); border-color:var(--red); }
+  main { max-width:1200px; margin:0 auto; padding:16px 20px; display:flex; flex-direction:column; gap:16px; }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px; }
+  .panel h2 { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin:0 0 10px; }
+  #cfg { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; align-items:end; }
+  #cfg label { font-size:11px; color:var(--dim); display:flex; flex-direction:column; gap:4px; }
+  #cfg input, #cfg select { border:1px solid var(--border); border-radius:8px; padding:8px 10px; font:inherit; }
+  #cfg button { background:var(--fg); color:#fafafa; border:0; border-radius:8px; padding:9px 16px; font:inherit; cursor:pointer; }
+  #cfg button:disabled { opacity:.4; cursor:wait; }
+  #cfg .ghost { background:#fff; color:var(--fg); border:1px solid var(--border); }
+  #body { display:grid; grid-template-columns:1fr 320px; gap:16px; }
+  @media (max-width:900px) { #body { grid-template-columns:1fr; } }
+  #transcript { display:flex; flex-direction:column; gap:8px; max-height:56vh; overflow:auto; }
+  .turn { max-width:85%; padding:8px 12px; border-radius:12px; font-size:13px; white-space:pre-wrap; }
+  .turn.pro { align-self:flex-start; background:#f4f4f5; border:1px solid var(--border); border-left:3px solid var(--green); }
+  .turn.con { align-self:flex-end; background:#f4f4f5; border:1px solid var(--border); border-right:3px solid var(--red); }
+  .turn .who { font-size:10px; color:var(--dim); margin-bottom:3px; text-transform:uppercase; letter-spacing:.06em; }
+  .sys { align-self:center; background:none; border:none; color:var(--dim); font-size:11px; text-align:center; }
+  .cursor { animation:pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity:0; } }
+  .stat { padding:7px 0; border-bottom:1px dashed var(--border); font-size:11px; }
+  .stat .row { display:flex; justify-content:space-between; }
+  .stat .badge { padding:1px 8px; border-radius:99px; border:1px solid var(--border); color:var(--dim); }
+  .stat .badge.hot { color:var(--green); border-color:var(--green); background:var(--greenbg); }
+  .stat .badge.warm { color:var(--fg); border-color:var(--fg); }
+  .stat .cap { color:var(--dim); }
+  #setup { max-width:34rem; margin:12vh auto; text-align:center; color:var(--dim); }
+  #setup code { background:#fff; border:1px solid var(--border); border-radius:6px; padding:2px 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🗣 debate</h1>
+  <span id="topicline">named KV sessions per agent · chat-native history · anti-parrot sampling</span>
+  <span id="chips"></span>
+  <a href="/flows/">← flows</a>
+</header>
+<main>
+  <div class="panel" id="cfgpanel">
+    <h2>Motion & debaters</h2>
+    <div id="cfg">
+      <label style="grid-column:1/-1">Topic
+        <input id="topic" value="Local-first AI beats cloud AI for everyday assistants"></label>
+      <label>Agent A name<input id="aname" value="Ada"></label>
+      <label>A stance<select id="astance"><option value="pro">FOR</option><option value="con">AGAINST</option></select></label>
+      <label>A style<input id="abehavior" value="crisp logician, cites concrete trade-offs"></label>
+      <label>Agent B name<input id="bname" value="Boris"></label>
+      <label>B stance<select id="bstance"><option value="con">AGAINST</option><option value="pro">FOR</option></select></label>
+      <label>B style<input id="bbehavior" value="pragmatic skeptic, pushes on ops reality"></label>
+      <label>Turns<input id="nturns" type="number" value="6" min="2" max="20"></label>
+      <button id="start">Start debate</button>
+      <button id="reset" class="ghost">Reset</button>
+    </div>
+  </div>
+  <div id="body" hidden>
+    <div class="panel"><h2>Transcript</h2><div id="transcript"></div></div>
+    <div class="panel"><h2>KV cache per turn</h2><div id="stats"></div></div>
+  </div>
+</main>
+<div id="setup" hidden></div>
+<script type="module">
+import { streamChatWithUsage, engineBase } from '../atoms/engine/index.js';
+import { hasServer } from '../atoms/auth/index.js';
+
+const $ = (id) => document.getElementById(id);
+let running = false;
+let turns = [];  // {agent, stance, content}
+let stats = [];  // {agent, prompt, cached, completion, ttftMs}
+
+function systemPrompt(agent, agents, topic) {
+  const opponents = agents.filter(a => a.name !== agent.name).map(a => a.name).join(', ');
+  return [
+    `You are ${agent.name}, in a formal debate. Motion: "${topic}".`,
+    `You argue ${agent.stance === 'pro' ? 'FOR' : 'AGAINST'} the motion — your side never changes, no matter what ${opponents} ${agents.length > 2 ? 'say' : 'says'}.`,
+    agent.behavior ? `Your style: ${agent.behavior}.` : '',
+    'Rules: start your reply with the argument itself — never meta-talk ("I\'m ready", "let\'s debate"), never questions back, no role prefixes, no quoting. Address the last point directly and keep it under 80 words.',
+  ].filter(Boolean).join('\n');
+}
+
+function addTurn(agent, stance) {
+  const d = document.createElement('div');
+  d.className = `turn ${stance}`;
+  d.innerHTML = `<div class="who"></div><div class="txt"></div>`;
+  d.querySelector('.who').textContent = `${agent} · ${stance === 'pro' ? 'FOR' : 'AGAINST'}`;
+  const cursor = document.createElement('span');
+  cursor.className = 'cursor'; cursor.textContent = '▍';
+  d.querySelector('.txt').appendChild(cursor);
+  $('transcript').appendChild(d);
+  $('transcript').scrollTop = 1e9;
+  return { el: d.querySelector('.txt'), cursor };
+}
+
+function sysMsg(text) {
+  const d = document.createElement('div');
+  d.className = 'sys'; d.textContent = text;
+  $('transcript').appendChild(d);
+}
+
+function renderStats() {
+  $('stats').innerHTML = stats.map((s, i) => {
+    const pct = s.prompt ? Math.round((s.cached / s.prompt) * 100) : 0;
+    const cls = pct > 60 ? 'hot' : pct > 0 ? 'warm' : '';
+    return `<div class="stat"><div class="row"><span>turn ${i + 1} · ${s.agent}</span>
+      <span class="badge ${cls}">${pct}% cached</span></div>
+      <div class="cap">${s.cached}/${s.prompt} cached · +${s.completion} · ttft ${s.ttftMs}ms</div></div>`;
+  }).reverse().join('');
+}
+
+function readConfig() {
+  return {
+    topic: $('topic').value.trim(),
+    turns: Math.max(2, Math.min(20, parseInt($('nturns').value) || 6)),
+    agents: [
+      { name: $('aname').value.trim() || 'Ada', stance: $('astance').value, behavior: $('abehavior').value.trim() },
+      { name: $('bname').value.trim() || 'Boris', stance: $('bstance').value, behavior: $('bbehavior').value.trim() },
+    ],
+  };
+}
+
+async function runDebate() {
+  const cfg = readConfig();
+  if (!cfg.topic || running) return;
+  running = true;
+  $('start').disabled = true;
+  turns = []; stats = [];
+  $('transcript').innerHTML = ''; $('stats').innerHTML = '';
+  $('body').hidden = false;
+  $('chips').innerHTML = cfg.agents.map(a =>
+    `<span class="chip ${a.stance}">${a.name} · ${a.stance === 'pro' ? 'FOR' : 'AGAINST'}</span>`).join('');
+  sysMsg(`motion: "${cfg.topic}" — ${cfg.turns} turns`);
+
+  for (let t = 0; t < cfg.turns; t++) {
+    const agent = cfg.agents[t % cfg.agents.length];
+    const { el, cursor } = addTurn(agent.name, agent.stance);
+
+    // Chat-native history: own turns = assistant, opponents = user.
+    const history = turns.map((x) => ({
+      role: x.agent === agent.name ? 'assistant' : 'user',
+      content: cfg.agents.length > 2 && x.agent !== agent.name ? `${x.agent}: ${x.content}` : x.content,
+    }));
+    const messages = [
+      { role: 'system', content: systemPrompt(agent, cfg.agents, cfg.topic) },
+      ...(history.length ? history : [{ role: 'user', content: `The motion is: "${cfg.topic}". Open the debate for your side.` }]),
+    ];
+
+    let generated = '';
+    let usage = null;
+    let failed = null;
+    let ttftMs = 0;
+    const t0 = performance.now();
+
+    await streamChatWithUsage('', messages, {
+      maxTokens: 180, temperature: 0.7, frequencyPenalty: 0.5,
+      sessionId: agent.name,   // NAMED session — each agent keeps its prefix
+    }, {
+      onDelta(d) {
+        if (!ttftMs) ttftMs = Math.round(performance.now() - t0);
+        generated += d;
+        el.textContent = generated; el.appendChild(cursor);
+        $('transcript').scrollTop = 1e9;
+      },
+      onUsage(u) { usage = u; },
+      onDone() {},
+      onError(e) { failed = e; },
+    });
+
+    cursor.remove();
+    if (failed) {
+      el.textContent = `error: ${failed.message}`;
+      sysMsg('debate aborted — engine unreachable?');
+      break;
+    }
+    turns.push({ agent: agent.name, stance: agent.stance, content: generated });
+    if (usage) {
+      stats.push({
+        agent: agent.name,
+        prompt: usage.prompt_tokens ?? 0,
+        cached: usage.prompt_tokens_details?.cached_tokens ?? 0,
+        completion: usage.completion_tokens ?? 0,
+        ttftMs,
+      });
+      renderStats();
+    }
+  }
+
+  sysMsg(running && turns.length === cfg.turns ? '— debate complete —' : '— debate ended —');
+  running = false;
+  $('start').disabled = false;
+}
+
+$('start').onclick = runDebate;
+$('reset').onclick = () => {
+  turns = []; stats = [];
+  $('transcript').innerHTML = ''; $('stats').innerHTML = '';
+  $('body').hidden = true; $('chips').innerHTML = '';
+};
+
+(async () => {
+  if (!(await hasServer())) {
+    $('setup').hidden = false;
+    $('setup').innerHTML = `<h2>debate needs an engine</h2>
+      <p>Start <code>combs serve --model … --port 8080</code> and open via
+      <code>deno task serve</code>.<br>Engine URL: <code>${engineBase()}</code></p>`;
+    $('cfgpanel').style.display = 'none';
+  }
+})();
+</script>
+</body>
+</html>

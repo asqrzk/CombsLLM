@@ -51,6 +51,12 @@ test('registry lists the shell flows', () => {
   assert(flowIds().includes('chat') && flowIds().includes('agent-runs'));
   assert(flows.chat.owner === 'shell');
 });
+test('registry lists the flow pages', () => {
+  for (const id of ['kv-chat', 'debate', 'multi-turn', 'emoji-studio']) {
+    assert(flowIds().includes(id), `missing flow: ${id}`);
+    assert(flows[id].owner === 'page' && flows[id].url, `bad descriptor: ${id}`);
+  }
+});
 await (async () => {
   try {
     await loadFlow('__nope__');

@@ -38,9 +38,10 @@ Cache Storage (progress bar + storage manager in the engine console).
 - **Agent runs**: Vercel AI SDK `ToolLoopAgent` driving *on-device* models
   via custom LanguageModel adapters, with VALIDATOR + STRATEGIST
   supervisor cycles; MCP tools (Playwright etc.) via the bundled client.
-- **Server flows** (being added incrementally): `kv-chat` (combs serve
-  rolling-session KV reuse with live cached-token stats), `emoji-studio`
-  (CombsMesh living emojis), passkey gate.
+- **Server flows** (pages under `/flows/`): `kv-chat` (rolling-session KV
+  reuse with live cached-token panel), `debate` (agents on named KV
+  sessions), `multi-turn` (windowed context preview), `emoji-studio`
+  (CombsMesh living emojis), passkey gate + permission relay.
 
 ## Architecture — atoms → flows
 

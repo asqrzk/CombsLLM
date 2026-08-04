@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<!-- multi-turn flow — windowed-context chat: only the last N turns are
+     sent (sliding window), with a live preview of the next request.
+     The lightweight contrast to kv-chat's full-transcript strategy. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CombsLLM — multi-turn</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#f4f4f5; --panel:#fff; --border:#e4e4e7; --fg:#18181b; --dim:#71717a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 -apple-system,"Helvetica Neue",sans-serif; }
+  header { padding:12px 20px; border-bottom:1px solid var(--border); background:var(--panel); display:flex; align-items:baseline; gap:12px; }
+  header h1 { font-size:15px; margin:0; }
+  header span { color:var(--dim); font-size:12px; }
+  header a { margin-left:auto; color:var(--dim); font-size:12px; text-decoration:none; }
+  header a:hover { color:var(--fg); }
+  main { display:grid; grid-template-columns:1fr 340px; gap:16px; padding:16px 20px; max-width:1100px; margin:0 auto; }
+  @media (max-width:900px) { main { grid-template-columns:1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px; }
+  .panel h2 { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin:0 0 10px; }
+  #chatlog { height:52vh; min-height:280px; overflow:auto; display:flex; flex-direction:column; gap:8px; margin-bottom:10px; }
+  .msg { max-width:82%; padding:8px 12px; border-radius:12px; font-size:13px; white-space:pre-wrap; }
+  .msg.user { align-self:flex-end; background:#18181b; color:#fafafa; }
+  .msg.bot { align-self:flex-start; background:#f4f4f5; border:1px solid var(--border); }
+  .msg.sys { align-self:center; background:none; color:var(--dim); font-size:11px; }
+  .cursor { animation:pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity:0; } }
+  #composer { display:flex; gap:8px; }
+  #composer input { flex:1; border:1px solid var(--border); border-radius:8px; padding:9px 12px; font:inherit; }
+  #composer button { background:var(--fg); color:#fafafa; border:0; border-radius:8px; padding:9px 16px; font:inherit; cursor:pointer; }
+  #composer button:disabled { opacity:.4; cursor:wait; }
+  #preview { font:11px/1.5 ui-monospace,monospace; color:var(--dim); white-space:pre-wrap; max-height:40vh; overflow:auto; background:var(--bg); border-radius:8px; padding:8px; }
+  #win { font-size:12px; color:var(--dim); margin-bottom:8px; }
+  #setup { max-width:34rem; margin:12vh auto; text-align:center; color:var(--dim); }
+  #setup code { background:#fff; border:1px solid var(--border); border-radius:6px; padding:2px 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🪟 multi-turn</h1>
+  <span>sliding-window context · repetition penalty · see exactly what the model sees</span>
+  <a href="/flows/">← flows</a>
+</header>
+<main id="main" hidden>
+  <div class="panel">
+    <h2>Chat (windowed)</h2>
+    <div id="chatlog"></div>
+    <div id="composer">
+      <input id="inp" placeholder="chat normally — the window slides after 12 turns…" autofocus>
+      <button id="send">Send</button>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>Next request context</h2>
+    <div id="win"></div>
+    <div id="preview"></div>
+  </div>
+</main>
+<div id="setup" hidden></div>
+<script type="module">
+import { streamChatWithUsage, engineBase } from '../atoms/engine/index.js';
+import { hasServer } from '../atoms/auth/index.js';
+
+const $ = (id) => document.getElementById(id);
+const SYSTEM = 'You are a helpful assistant. Answer concisely.';
+const WINDOW = 12;
+
+const turns = [];  // {role, content}
+let busy = false;
+
+function bubble(cls, text) {
+  const d = document.createElement('div');
+  d.className = 'msg ' + cls; d.textContent = text;
+  $('chatlog').appendChild(d); $('chatlog').scrollTop = 1e9;
+  return d;
+}
+
+function windowed() {
+  return turns.slice(-WINDOW);
+}
+
+function renderPreview() {
+  const w = windowed();
+  $('win').textContent = `window: last ${w.length} of ${turns.length} turns${turns.length > WINDOW ? ' — older turns dropped' : ''}`;
+  $('preview').textContent =
+    `[system] ${SYSTEM}\n` +
+    w.map((m) => `[${m.role}] ${m.content.slice(0, 140)}${m.content.length > 140 ? '…' : ''}`).join('\n');
+}
+
+async function send() {
+  const inp = $('inp'), text = inp.value.trim();
+  if (!text || busy) return;
+  busy = true; inp.value = ''; $('send').disabled = true;
+
+  turns.push({ role: 'user', content: text });
+  bubble('user', text);
+  const reply = bubble('bot', '');
+  const cursor = document.createElement('span');
+  cursor.className = 'cursor'; cursor.textContent = '▍';
+  reply.appendChild(cursor);
+  renderPreview();
+
+  const messages = [{ role: 'system', content: SYSTEM }, ...windowed()];
+  let generated = '';
+
+  await streamChatWithUsage('', messages, { maxTokens: 256, temperature: 0.7, presencePenalty: 1.15 }, {
+    onDelta(t) {
+      generated += t;
+      reply.textContent = generated;
+      reply.appendChild(cursor);
+      $('chatlog').scrollTop = 1e9;
+    },
+    onDone() {
+      cursor.remove();
+      turns.push({ role: 'assistant', content: generated });
+      renderPreview();
+    },
+    onError(e) {
+      cursor.remove();
+      reply.textContent = `error: ${e.message}`;
+    },
+  });
+
+  busy = false; $('send').disabled = false; inp.focus();
+}
+$('send').onclick = send;
+$('inp').addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+
+(async () => {
+  if (!(await hasServer())) {
+    $('setup').hidden = false;
+    $('setup').innerHTML = `<h2>multi-turn needs an engine</h2>
+      <p>Start <code>combs serve --model … --port 8080</code> and open via
+      <code>deno task serve</code>.<br>Engine URL: <code>${engineBase()}</code></p>`;
+    return;
+  }
+  $('main').hidden = false;
+  renderPreview();
+  bubble('sys', `engine: ${engineBase()} · window = ${WINDOW} turns`);
+})();
+</script>
+</body>
+</html>

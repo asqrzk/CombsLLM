@@ -28,6 +28,15 @@ Keep it that way.
 - `atoms/relay/` — `relayFetch`: routed via `/api/relay` when server-
   hosted (428 → permission dialog → decide → retry), direct fetch when
   static.
+- `atoms/engine/` — `streamChatWithUsage`: the shared usage-keeping SSE
+  client for `combs serve` (relay-routed, session_id support). Used by
+  the kv-chat / debate / multi-turn flow pages. NOTE: `combs-remote.js`
+  still carries its own copy — folding it into this atom is a cleanup.
+- `flows/kv-chat.html` / `debate.html` / `multi-turn.html` — standalone
+  flow pages (best-of chew capabilities): full-transcript KV chat with
+  per-turn cache panel; N-agent debate on named KV sessions; windowed
+  chat with context preview. `flows/index.html` is the launcher (header
+  grid icon).
 - `atoms/emoji/` — client for the server's `/api/emoji/*` living-emoji
   host (`emojiHost` wrappers + frame/unicode decoders).
 - `server/emoji.ts` — the living-emoji interpreter (spark-fox + nyx-owl):

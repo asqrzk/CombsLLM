@@ -30,6 +30,21 @@ export const flows = {
     // (remote)" in the model picker to enter this flow.
     owner: 'shell',
   },
+  'kv-chat': {
+    title: 'KV Chat',
+    owner: 'page',
+    url: '/flows/kv-chat.html',
+  },
+  debate: {
+    title: 'Debate',
+    owner: 'page',
+    url: '/flows/debate.html',
+  },
+  'multi-turn': {
+    title: 'Multi-turn (windowed)',
+    owner: 'page',
+    url: '/flows/multi-turn.html',
+  },
   'emoji-studio': {
     title: 'Emoji Studio',
     // Standalone page (flows/emoji-studio.html) hosted by server/emoji.ts;
