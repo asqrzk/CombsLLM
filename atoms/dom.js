@@ -90,6 +90,7 @@ export const agentsStatusText = $('agents-status-text');
 export const agentsElapsed = $('agents-elapsed');
 export const agentsStats = $('agents-stats');
 export const agentsExport = $('agents-export');
+export const agentsSpawnPod = $('agents-spawn-pod');
 export const agentsBadge = $('agents-badge');
 export const agentsSettings = $('agents-settings');
 export const agentsControllerLog = $('agents-controller-log');

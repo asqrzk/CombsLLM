@@ -34,6 +34,12 @@ const HOST = Deno.env.get("HOST") || "127.0.0.1";
 const ROOT = new URL("..", import.meta.url).pathname; // repo root
 const DATA_DIR = Deno.env.get("COMBSLLM_DATA") || `${ROOT}server/data`;
 
+// Pod origins (local mode): extra listeners on these ports serve the
+// same app, so each pod tab gets its own origin (storage quota + heap).
+// Hosted mode uses subdomains instead — see atoms/pods + deploy docs.
+const POD_PORTS = (Deno.env.get("COMBSLLM_POD_PORTS") || "")
+  .split(",").map((s) => parseInt(s.trim())).filter((n) => Number.isFinite(n) && n > 0);
+
 const permissions = new PermissionStore(`${DATA_DIR}/permissions.json`);
 await Deno.mkdir(DATA_DIR, { recursive: true });
 await permissions.load();
@@ -152,6 +158,9 @@ async function handler(req: Request): Promise<Response> {
     if (path === "/api/permissions" && req.method === "GET") {
       return json(permissions.snapshot());
     }
+    if (path === "/api/pods" && req.method === "GET") {
+      return json({ podPorts: POD_PORTS });
+    }
     if (path === "/api/permissions/decide" && req.method === "POST") {
       const { scope, grant } = await req.json().catch(() => ({})) as { scope?: string; grant?: string };
       if (!scope || !grant || !PermissionStore.isValidGrant(grant)) {
@@ -170,6 +179,10 @@ async function handler(req: Request): Promise<Response> {
 
 Deno.serve({ port: PORT, hostname: HOST }, handler);
 console.log(`[combsllm] listening on http://${HOST}:${PORT}`);
+for (const podPort of POD_PORTS) {
+  Deno.serve({ port: podPort, hostname: HOST }, handler);
+  console.log(`[combsllm] pod origin: http://${HOST}:${podPort}`);
+}
 console.log(`[combsllm] serving app from ${ROOT}`);
 console.log(`[combsllm] data dir: ${DATA_DIR}`);
 console.log(`[combsllm] passkey RP: ${Deno.env.get("COMBSLLM_RP_ID") || "localhost"} (origins: ${Deno.env.get("COMBSLLM_ORIGINS") || "localhost defaults"})`);

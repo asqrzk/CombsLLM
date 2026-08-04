@@ -37,6 +37,15 @@ Keep it that way.
   instructions when the dylib is absent — platform unaffected.
 - `flows/emoji-studio.html` — standalone flow page (stage canvas, state
   panels, chat, version chain w/ time-travel checkout, unicode viewer).
+- `atoms/pods/` — origin-isolated agent runtimes: local pods = extra
+  ports on the same server (`COMBSLLM_POD_PORTS=8902,8903`), hosted pods
+  = subdomains (`run-<n>.<domain>`, needs `COMBSLLM_COOKIE_DOMAIN=.<domain>`
+  + wildcard TLS). Passkey session is shared (host-scoped cookies on
+  localhost; Domain cookie hosted). Model bytes reach pods via own-cache
+  → parent postMessage transfer (zero-copy) → direct download.
+- `flows/pod.html` — pod page: isolation proof (heap/quota per origin),
+  model load, in-pod inference. Spawn from the agents page (🛰 button).
+  Full ToolLoopAgent-in-pod is a later increment.
 - `mcp-proxy.mjs` — zero-dep Node CORS proxy for local MCP servers
 - `docs/` — learnings + archive
 
@@ -77,5 +86,8 @@ Regression checklist after ANY change (manual, browser):
 - HF token field (engine console) is per-user, stored client-side only.
 - Secrets must never be committed — `issues.md` was deleted for this
   reason (2026-08-04); check `git status` before committing.
-- Subdomain agent pods (Phase 5): origin isolation (ports locally,
-  subdomains hosted) gives each agent its own storage quota + ~4GB heap.
+- Subdomain agent pods: origin isolation (ports locally,
+  subdomains hosted) gives each agent its own storage quota + ~4GB heap;
+  WebAuthn RP "localhost" covers all localhost ports, so local pods
+  inherit the passkey session — hosted pods inherit it via the Domain
+  cookie.

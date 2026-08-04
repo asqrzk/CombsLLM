@@ -13,7 +13,7 @@
 import {
   agentsBtn, agentsPage, agentsTask, agentsStart, agentsStop,
   agentsControllerPrompt, agentsMaxSteps, agentsMaxMinutes,
-  agentsStatusText, agentsElapsed, agentsStats, agentsExport,
+  agentsStatusText, agentsElapsed, agentsStats, agentsExport, agentsSpawnPod,
   agentsBadge, agentsSettings, toggleConsoleBtn,
   agentsControllerLog, agentsWorkerLog, agentsFinal,
   consolePanel, chatScroll, composer, headerTitle, newChatBtnLabel
@@ -23,7 +23,7 @@ import { toast, showConfirmModal, hideConfirmModal } from '../atoms/ui.js';
 import { escapeHtml, deriveTitle } from '../atoms/text.js';
 import { mcpManager, captureScreenshot } from '../atoms/mcp.js';
 import { idbPutAgentRun, idbGetAgentRuns, idbDeleteAgentRun } from '../atoms/store.js';
-import { getModelName } from '../atoms/config.js';
+import { getModelName, getModelDef, modelDownloadUrl } from '../atoms/config.js';
 import { createLitertLanguageModel } from '../atoms/backends/ai-sdk-litert.js';
 import { createTasksLanguageModel } from '../atoms/backends/ai-sdk-tasks.js';
 import { compactMessages } from '../atoms/context-budget.js';
@@ -997,5 +997,26 @@ export function initAgents() {
     run.abort.abort();
   });
   agentsExport.addEventListener('click', exportRun);
+
+  // Pods: origin-isolated runtimes (own storage quota + heap). The pod
+  // page proves isolation and runs its own model; full ToolLoopAgent-in-
+  // pod is a later increment (see atoms/pods header).
+  agentsSpawnPod.addEventListener('click', async () => {
+    try {
+      const { openPod, listenToPod, sendModelBytes } = await import('../atoms/pods/index.js');
+      // Hand the pod the currently-selected model's URL (it will try its
+      // own cache → parent byte transfer → direct download, in that order).
+      const def = state.currentModel ? getModelDef(state.currentModel) : null;
+      const query = def && !def.remote
+        ? `?${new URLSearchParams({ model: modelDownloadUrl(def) })}` : '';
+      const { win, origin } = await openPod(`/flows/pod.html${query}`);
+      listenToPod(win, origin, {
+        onReady: () => toast(`pod live on ${origin}`, 'success', 4000),
+        onModelRequest: (url) => sendModelBytes(win, origin, url),
+      });
+    } catch (e) {
+      toast(e.message, 'error', 5000);
+    }
+  });
   setExportState();
 }

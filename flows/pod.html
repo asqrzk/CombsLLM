@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<!-- pod page — an origin-isolated agent runtime (see atoms/pods).
+     Opened by the app via openPod(); proves per-origin isolation
+     (own storage quota + own renderer heap) and runs its own model. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CombsLLM pod</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { margin:0; background:#0d1117; color:#e6edf3; font:14px/1.5 -apple-system,"SF Mono",Menlo,monospace; }
+  header { padding:12px 18px; border-bottom:1px solid #30363d; display:flex; gap:10px; align-items:baseline; }
+  header h1 { font-size:15px; margin:0; }
+  header span { color:#8b949e; font-size:12px; word-break:break-all; }
+  main { padding:16px 18px; max-width:760px; margin:0 auto; display:flex; flex-direction:column; gap:14px; }
+  .panel { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:12px 14px; }
+  .panel h2 { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:#8b949e; margin:0 0 8px; }
+  #log { font-size:12px; white-space:pre-wrap; max-height:220px; overflow:auto; }
+  #log .ok { color:#3fb950; } #log .warn { color:#f0a832; } #log .err { color:#f06868; }
+  #composer { display:flex; gap:8px; }
+  #composer input { flex:1; background:#0a0d12; border:1px solid #30363d; color:#e6edf3; border-radius:8px; padding:9px 12px; font:inherit; }
+  #composer button, #loadbtn { background:#f0a832; color:#111; border:0; border-radius:8px; padding:9px 16px; font:inherit; cursor:pointer; }
+  #composer button:disabled, #loadbtn:disabled { opacity:.4; cursor:wait; }
+  #reply { font-size:13px; white-space:pre-wrap; min-height:1.5em; }
+  .kv { font-size:12px; color:#8b949e; }
+  .kv b { color:#e6edf3; font-weight:normal; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛰 pod</h1>
+  <span id="origin"></span>
+</header>
+<main>
+  <div class="panel">
+    <h2>Isolation</h2>
+    <div class="kv">heap: <b id="heap">…</b></div>
+    <div class="kv">storage quota (this origin): <b id="quota">…</b></div>
+    <div class="kv">parent link: <b id="parent">…</b></div>
+  </div>
+  <div class="panel">
+    <h2>Model</h2>
+    <div class="kv">url: <b id="murl">…</b></div>
+    <div class="kv">source: <b id="msrc">not loaded</b></div>
+    <button id="loadbtn">Load model in this pod</button>
+    <div id="log" style="margin-top:8px"></div>
+  </div>
+  <div class="panel">
+    <h2>Talk to the pod model</h2>
+    <div id="composer">
+      <input id="inp" placeholder="ask something — inference happens in THIS pod's process" disabled>
+      <button id="send" disabled>Send</button>
+    </div>
+    <div id="reply" style="margin-top:8px"></div>
+  </div>
+</main>
+<script type="module">
+import { podHandshake } from '../atoms/pods/index.js';
+import { LitertBackend } from '../atoms/backends/litert.js';
+
+const $ = (id) => document.getElementById(id);
+const log = (cls, msg) => {
+  const d = document.createElement('div');
+  d.className = cls; d.textContent = msg;
+  $('log').appendChild(d); $('log').scrollTop = 1e9;
+};
+
+$('origin').textContent = location.origin;
+$('parent').textContent = window.opener ? 'linked (postMessage channel open)' : 'standalone (no opener)';
+
+async function refreshStats() {
+  if (performance.memory) {
+    $('heap').textContent = `${(performance.memory.usedJSHeapSize / 1048576).toFixed(0)} MB used / ${(performance.memory.jsHeapSizeLimit / 1073741824).toFixed(1)} GB limit`;
+  } else {
+    $('heap').textContent = 'n/a (non-Chromium)';
+  }
+  if (navigator.storage?.estimate) {
+    const e = await navigator.storage.estimate();
+    $('quota').textContent = `${(e.usage / 1048576).toFixed(1)} MB used / ${(e.quota / 1073741824).toFixed(1)} GB quota`;
+  }
+}
+refreshStats();
+
+const MODEL_URL = new URLSearchParams(location.search).get('model')
+  || 'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm';
+$('murl').textContent = MODEL_URL;
+
+const channel = podHandshake({ onInit: () => log('ok', '⇢ pod:init received from parent') });
+
+let backend = null;
+$('loadbtn').onclick = async () => {
+  $('loadbtn').disabled = true;
+  try {
+    // 1. own cache (warm on repeat visits to THIS origin)
+    const cache = await caches.open('litert-models-v1');
+    let res = await cache.match(MODEL_URL);
+    let source = 'pod cache (this origin)';
+
+    // 2. parent transfer (zero-copy ArrayBuffer over postMessage)
+    if (!res && window.opener) {
+      log('warn', 'own cache cold — asking parent for model bytes…');
+      const bytes = await channel.requestModel(MODEL_URL);
+      if (bytes) {
+        res = new Response(bytes);
+        source = 'parent transfer (postMessage)';
+        await cache.put(MODEL_URL, new Response(bytes.slice(0))); // keep pod-local copy
+      }
+    }
+
+    // 3. direct download fallback
+    if (!res) {
+      log('warn', 'downloading model directly into this pod…');
+      res = await fetch(MODEL_URL);
+      if (!res.ok) throw new Error(`download HTTP ${res.status}`);
+      source = 'direct download';
+      await cache.put(MODEL_URL, res.clone());
+    }
+
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    log('ok', `model acquired via ${source} (${(blob.size / 1073741824).toFixed(2)} GB)`);
+    $('msrc').textContent = source;
+
+    backend = new LitertBackend();
+    await backend.mount({ label: 'pod model' }, blobUrl, { maxTokens: 4096 });
+    await backend.resetContext([]);
+    log('ok', 'engine ready — inference runs in this pod process');
+    $('inp').disabled = false; $('send').disabled = false;
+    refreshStats();
+  } catch (e) {
+    log('err', 'load failed: ' + e.message);
+    $('loadbtn').disabled = false;
+  }
+};
+
+$('send').onclick = async () => {
+  const msg = $('inp').value.trim();
+  if (!msg || !backend) return;
+  $('inp').value = ''; $('send').disabled = true;
+  $('reply').textContent = '';
+  try {
+    await backend.send(msg, {}, (t) => { $('reply').textContent += t; });
+  } catch (e) { $('reply').textContent = 'error: ' + e.message; }
+  $('send').disabled = false;
+  refreshStats();
+};
+$('inp').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('send').click(); });
+</script>
+</body>
+</html>

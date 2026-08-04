@@ -110,7 +110,11 @@ function issueSession(): string {
   return token;
 }
 export function sessionCookie(token: string, secure: boolean): string {
-  const base = `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL / 1000}`;
+  // Hosted pods live on subdomains — COMBSLLM_COOKIE_DOMAIN=".<domain>"
+  // shares the session cookie with them (local pods on localhost ports
+  // share it automatically: cookies are host-scoped, not port-scoped).
+  const domain = Deno.env.get("COMBSLLM_COOKIE_DOMAIN");
+  const base = `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL / 1000}${domain ? `; Domain=${domain}` : ""}`;
   return secure ? `${base}; Secure` : base;
 }
 export function clearSessionCookie() {
