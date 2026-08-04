@@ -44,14 +44,18 @@ const CRED_FILE = `${CRED_DIR}/authn.json`;
 
 export const SESSION_COOKIE = "combsllm_session";
 
-// ── base64url helpers (credential public keys at rest) ──────────────
+// ── base64 helpers — MUST match @combs/zerotrust's encoding, because
+// the credential store is shared with the engine's apps: base64url,
+// unpadded (+ → -, / → _, no "="). Decode accepts both alphabets.
 function b64encode(bytes: Uint8Array): string {
   let bin = "";
   for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin);
+  return btoa(bin).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 function b64decode(s: string): Uint8Array<ArrayBuffer> {
-  const bin = atob(s);
+  const std = s.replaceAll("-", "+").replaceAll("_", "/");
+  const padded = std + "=".repeat((4 - (std.length % 4)) % 4);
+  const bin = atob(padded);
   const out = new Uint8Array(new ArrayBuffer(bin.length));
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
