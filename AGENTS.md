@@ -28,6 +28,15 @@ Keep it that way.
 - `atoms/relay/` — `relayFetch`: routed via `/api/relay` when server-
   hosted (428 → permission dialog → decide → retry), direct fetch when
   static.
+- `atoms/emoji/` — client for the server's `/api/emoji/*` living-emoji
+  host (`emojiHost` wrappers + frame/unicode decoders).
+- `server/emoji.ts` — the living-emoji interpreter (spark-fox + nyx-owl):
+  character logic lives in the emoji's blocks; host builds/renders/
+  interprets via `@combs/mesh` FFI (`COMBS_MESH_LIB`) and voices personas
+  through `combs serve` (`COMBS_ENGINE_URL`). Degrades to 503 with setup
+  instructions when the dylib is absent — platform unaffected.
+- `flows/emoji-studio.html` — standalone flow page (stage canvas, state
+  panels, chat, version chain w/ time-travel checkout, unicode viewer).
 - `mcp-proxy.mjs` — zero-dep Node CORS proxy for local MCP servers
 - `docs/` — learnings + archive
 
@@ -50,9 +59,10 @@ Keep it that way.
 
 ```sh
 python3 -m http.server 8000    # static app
-deno run --allow-net --allow-read --allow-write --allow-env server/main.ts
-                               # full platform on :8787 (PORT env to change)
-deno check server/main.ts      # server type-check
+deno task serve                # full platform on :8787 (PORT env to change)
+deno task check                # server type-check
+deno task test:remote          # combs-remote KV reuse (needs combs serve :8475)
+deno task test:emoji           # emoji host (needs COMBS_MESH_LIB + COMBS_ENGINE_URL)
 ```
 
 Regression checklist after ANY change (manual, browser):

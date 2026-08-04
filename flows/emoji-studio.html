@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<!-- emoji-studio flow — living CombsMesh emojis hosted by server/emoji.ts.
+     Requires the CombsLLM server (passkey session + COMBS_MESH_LIB). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CombsLLM — emoji studio</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --border:#30363d; --fg:#e6edf3; --dim:#8b949e; --amber:#f0a832; --green:#3fb950; --blue:#58a6ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 -apple-system, "SF Mono", Menlo, monospace; }
+  header { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:baseline; gap:12px; }
+  header h1 { font-size:16px; margin:0; }
+  header span { color:var(--dim); font-size:12px; }
+  header a { color:var(--dim); font-size:12px; text-decoration:none; }
+  header a:hover { color:var(--fg); }
+  main { display:grid; grid-template-columns: 340px 1fr; gap:16px; padding:16px 20px; max-width:1200px; margin:0 auto; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px; }
+  .panel h2 { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin:0 0 10px; }
+  #stage { display:flex; flex-direction:column; align-items:center; gap:10px; }
+  canvas { image-rendering:pixelated; width:256px; height:256px; border-radius:12px; background:#0a0d12; transition:box-shadow .6s ease; }
+  #cvwrap { position:relative; }
+  #cvwrap .glyph { position:absolute; top:6px; right:10px; font-size:34px; pointer-events:none; text-shadow:0 2px 8px #000; }
+  @keyframes sway { 0%,100%{transform:rotate(-3deg)} 50%{transform:rotate(3deg)} }
+  @keyframes bounce { 0%,100%{transform:translateY(0) scale(1)} 30%{transform:translateY(-14px) scale(1.05)} 60%{transform:translateY(0) scale(0.98)} }
+  #cvwrap.thinking canvas { animation:sway .8s ease-in-out infinite; filter:saturate(.8) brightness(.9); }
+  #cvwrap.celebrate canvas { animation:bounce .6s ease-in-out 3; }
+  #cvwrap.sleepy canvas { filter:saturate(.5) brightness(.75); transform:rotate(2deg); }
+  #dominant { font-size:12px; color:var(--dim); }
+  .badge { display:inline-block; padding:2px 10px; border-radius:99px; font-size:12px; border:1px solid var(--border); }
+  .bar { display:grid; grid-template-columns:70px 1fr 34px; align-items:center; gap:8px; margin:6px 0; font-size:12px; }
+  .bar .track { height:8px; background:#0a0d12; border-radius:99px; overflow:hidden; }
+  .bar .fill { height:100%; border-radius:99px; transition:width .6s ease; }
+  .todo { font-size:12px; margin:5px 0; color:var(--dim); }
+  .todo.done { color:var(--green); text-decoration:line-through; }
+  #chain { max-height:180px; overflow:auto; font-size:11px; }
+  #chain div { padding:4px 0; border-bottom:1px dashed var(--border); color:var(--dim); }
+  #chain .centry { cursor:pointer; }
+  #chain .centry:hover { color:var(--fg); background:#f0a83211; }
+  #chain b { color:var(--amber); font-weight:normal; }
+  #chatlog { height:280px; overflow:auto; display:flex; flex-direction:column; gap:8px; margin-bottom:10px; }
+  .msg { max-width:80%; padding:8px 12px; border-radius:12px; font-size:13px; white-space:pre-wrap; }
+  .msg.user { align-self:flex-end; background:#1f6feb33; border:1px solid #1f6feb66; }
+  .msg.fox { align-self:flex-start; background:#f0a83222; border:1px solid #f0a83255; }
+  .msg.sys { align-self:center; background:none; border:none; color:var(--dim); font-size:11px; text-align:center; }
+  #composer { display:flex; gap:8px; }
+  #composer input { flex:1; background:#0a0d12; border:1px solid var(--border); color:var(--fg); border-radius:8px; padding:9px 12px; font:inherit; }
+  #composer button { background:var(--amber); color:#111; border:0; border-radius:8px; padding:9px 16px; font:inherit; cursor:pointer; }
+  #composer button:disabled { opacity:.4; cursor:wait; }
+  #unicode { word-break:break-all; font-size:10px; color:var(--dim); max-height:90px; overflow:auto; background:#0a0d12; padding:8px; border-radius:8px; }
+  details summary { cursor:pointer; color:var(--dim); font-size:12px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+  #fatal { max-width:36rem; margin:15vh auto; text-align:center; color:var(--dim); }
+  #fatal code { background:#0a0d12; border-radius:6px; padding:2px 6px; color:var(--amber); }
+</style>
+</head>
+<body>
+<header>
+  <h1>✨ emoji studio</h1>
+  <span>character lives in the blocks · host is a dumb interpreter · state changes = new hash</span>
+  <select id="charsel" style="margin-left:auto;background:#0a0d12;color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font:inherit"></select>
+  <button id="resetbtn" title="restart this character" style="background:#0a0d12;color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font:inherit;cursor:pointer">⟳</button>
+  <a href="/">← app</a>
+</header>
+<main id="main" hidden>
+  <div id="stage">
+    <div class="panel" id="cvwrap"><canvas id="cv" width="64" height="64"></canvas><span class="glyph" id="glyph"></span>
+      <div id="dominant">—</div>
+    </div>
+    <div class="panel" style="width:100%">
+      <h2>Lifecycle</h2>
+      <span id="lfc" class="badge">idle</span>
+    </div>
+    <div class="panel" style="width:100%">
+      <h2>Emotions</h2>
+      <div id="emos"></div>
+    </div>
+    <div class="panel" style="width:100%">
+      <h2>Todos</h2>
+      <div id="todos"></div>
+    </div>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:16px;">
+    <div class="panel" style="flex:1">
+      <h2>Chat with the emoji (local LLM = persona)</h2>
+      <div id="chatlog"></div>
+      <div id="composer">
+        <input id="inp" placeholder="say hi, ask questions, tell it your name, make it sleepy…" autofocus>
+        <button id="send">Send</button>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="panel"><h2>Version chain (sha256)</h2><div id="chain"></div></div>
+      <div class="panel">
+        <h2>Unicode travel form</h2>
+        <details><summary>PUA string (invisible emoji) + round-trip proof</summary>
+          <p id="uinfo" style="font-size:11px;color:var(--dim)"></p>
+          <div id="unicode"></div>
+        </details>
+      </div>
+    </div>
+  </div>
+</main>
+<div id="fatal" hidden></div>
+<script type="module">
+import { emojiHost, decodeFrames, unicodeEscapes } from '../atoms/emoji/index.js';
+import { hasServer } from '../atoms/auth/index.js';
+
+const $ = (id) => document.getElementById(id);
+const STATE_COLORS = ["#3fb950", "#58a6ff", "#f06868", "#f0a832", "#7c6ff0"];
+let TINTS = {};
+let frames = null, fw = 64, fh = 64, fi = 0, dominant = "curious";
+let ANIM = { event: {}, state: {} };
+let moodOverride = null;
+
+function fatal(html) {
+  $("main").hidden = true;
+  const f = $("fatal");
+  f.hidden = false;
+  f.innerHTML = html;
+}
+
+async function loadFrames() {
+  const d = await emojiHost.frames();
+  fw = d.width; fh = d.height;
+  frames = decodeFrames(d);
+}
+
+$("resetbtn").onclick = async () => {
+  if (!confirm("Restart this character? Chain and chat reset (all versions stay in the registry).")) return;
+  frames = null; moodOverride = null;
+  const s = await emojiHost.reset();
+  await loadFrames();
+  renderState(s);
+  $("chatlog").innerHTML = "";
+  bubble("sys", "⟳ " + s.emoji.name + " restarted — genesis " + s.chain[0].hash.slice(0, 10));
+};
+
+$("charsel").onchange = async (e) => {
+  frames = null;
+  const s = await emojiHost.switchCharacter(e.target.value);
+  await loadFrames();
+  renderState(s);
+  bubble("sys", `⇄ now hosting ${s.emoji.name} — same interpreter, different artifact`);
+};
+
+function drawFrame() {
+  if (!frames) return;
+  const cv = $("cv"), ctx = cv.getContext("2d");
+  ctx.clearRect(0, 0, fw, fh);
+  ctx.putImageData(frames[fi], 0, 0);
+  ctx.globalCompositeOperation = "source-atop";
+  ctx.fillStyle = (TINTS[dominant] || "#8b949e") + "44";
+  ctx.fillRect(0, 0, fw, fh);
+  ctx.globalCompositeOperation = "source-over";
+  fi = (fi + 1) % frames.length;
+}
+setInterval(drawFrame, 160);
+
+function applyMood(lifecycleState) {
+  const wrap = $("cvwrap"), glyph = $("glyph");
+  wrap.classList.remove("thinking", "celebrate", "sleepy");
+  let g = "";
+  if (moodOverride === "thinking") { wrap.classList.add("thinking"); g = ANIM.event?.thinking || "?"; }
+  else if (moodOverride === "celebrate") { wrap.classList.add("celebrate"); g = ANIM.event?.celebrate || "✨"; }
+  else if (moodOverride === "aha") { g = ANIM.event?.aha || "!"; }
+  else if (ANIM.state?.[lifecycleState]) { wrap.classList.add("sleepy"); g = ANIM.state[lifecycleState]; }
+  glyph.textContent = g;
+}
+
+let curLifecycle = "idle";
+function renderState(s) {
+  curLifecycle = s.lifecycle;
+  dominant = s.dominant;
+  TINTS = s.spec?.tints || {};
+  ANIM = { event: {}, state: {} };
+  for (const [k, v] of Object.entries(s.anim || {})) {
+    if (k.startsWith("event.")) ANIM.event[k.slice(6)] = v;
+    if (k.startsWith("state.")) ANIM.state[k.slice(6)] = v;
+  }
+  applyMood(s.lifecycle);
+  $("cv").style.boxShadow = `0 0 32px 2px ${(TINTS[s.dominant] || "#8b949e")}66`;
+  $("dominant").textContent = `${s.emoji.name} · dominant: ${s.dominant} · turn ${s.turn} · hash ${s.chain[s.chain.length-1].hash.slice(0,10)}…`;
+  const lfc = $("lfc");
+  const states = s.emoji.blocks.find((b) => b.type === "lfc").states.map((x) => x.name);
+  const ci = Math.max(0, states.indexOf(s.lifecycle));
+  lfc.textContent = s.lifecycle;
+  lfc.style.color = STATE_COLORS[ci % STATE_COLORS.length];
+  lfc.style.borderColor = STATE_COLORS[ci % STATE_COLORS.length];
+  if (s.characters && $("charsel").options.length === 0) {
+    for (const n of s.characters) $("charsel").append(new Option(n, n));
+    $("charsel").value = s.current;
+  }
+  const emo = s.emoji.blocks.find((b) => b.type === "emo");
+  $("emos").innerHTML = emo.states.map((e) => `
+    <div class="bar"><span>${e.name}</span>
+      <div class="track"><div class="fill" style="width:${e.intensity*100}%;background:${TINTS[e.name]||"#8b949e"}"></div></div>
+      <span>${e.intensity.toFixed(2)}</span></div>`).join("");
+  const tdo = s.emoji.blocks.find((b) => b.type === "tdo");
+  $("todos").innerHTML = tdo.items.map((i) =>
+    `<div class="todo ${i.status === "Done" ? "done" : ""}">${i.status === "Done" ? "☑" : "☐"} ${i.value}</div>`).join("");
+  $("chain").innerHTML = s.chain.slice().reverse().map((c) =>
+    `<div class="centry" data-hash="${c.hash}" title="click to restore this version"><b>${c.hash.slice(0,10)}</b> · t${c.turn} · ${c.note}</div>`).join("");
+  document.querySelectorAll(".centry").forEach((el) => {
+    el.onclick = async () => {
+      const r = await emojiHost.checkout(el.dataset.hash);
+      if (r.error) return bubble("sys", "⏪ " + r.error);
+      bubble("sys", "⏪ restored " + r.restored.slice(0, 10) + " — the emoji is now that past self");
+      renderState(r);
+    };
+  });
+}
+
+function bubble(cls, text) {
+  const d = document.createElement("div");
+  d.className = "msg " + cls; d.textContent = text;
+  $("chatlog").appendChild(d); $("chatlog").scrollTop = 1e9;
+  return d;
+}
+
+async function send() {
+  const inp = $("inp"), msg = inp.value.trim();
+  if (!msg) return;
+  inp.value = ""; $("send").disabled = true;
+  bubble("user", msg);
+  const thinking = bubble("fox", "…");
+  moodOverride = "thinking"; applyMood(curLifecycle);
+  try {
+    const r = await emojiHost.chat(msg);
+    thinking.textContent = r.reply ?? ("error: " + r.error);
+    if (r.transitions?.length) bubble("sys", "⚡ " + r.transitions.join(" · "));
+    moodOverride = r.celebrate ? "celebrate" : (r.aha ? "aha" : null);
+    if (r.emoji) renderState(r);
+    if (moodOverride) setTimeout(() => { moodOverride = null; applyMood(curLifecycle); }, 2500);
+  } catch (e) { thinking.textContent = "error: " + e.message; moodOverride = null; applyMood(curLifecycle); }
+  $("send").disabled = false; $("inp").focus();
+}
+$("send").onclick = send;
+$("inp").addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+
+(async () => {
+  if (!(await hasServer())) {
+    return fatal(`<h2>emoji studio needs the CombsLLM server</h2>
+      <p>This flow is hosted server-side (passkey session + the mesh FFI dylib).<br><br>
+      Start it with:<br><br>
+      <code>COMBS_MESH_LIB=/path/to/libcombsmesh_ffi.dylib \<br>
+      &nbsp;&nbsp;deno run --allow-net --allow-read --allow-write --allow-env --allow-ffi server/main.ts</code><br><br>
+      then open <code>http://localhost:8787/flows/emoji-studio.html</code></p>`);
+  }
+  try {
+    await loadFrames();
+    const s = await emojiHost.state();
+    if (s.error) throw new Error(s.error);
+    $("main").hidden = false;
+    renderState(s);
+    const u = await emojiHost.unicode();
+    $("uinfo").textContent = `${u.chars} chars · server-side decode round-trip: ${u.verified ? "✅ identical" : "❌"}`;
+    $("unicode").textContent = unicodeEscapes(u.unicode);
+    bubble("sys", s.emoji.name + " hatched — genesis " + s.chain[0].hash.slice(0, 10));
+  } catch (e) {
+    fatal(`<h2>emoji host unavailable</h2><p>${e.message}</p>`);
+  }
+})();
+</script>
+</body>
+</html>

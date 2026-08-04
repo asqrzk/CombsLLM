@@ -12,9 +12,14 @@ agent runs with supervisor loops, MCP tools — plus server-backed flows
 # static only (on-device inference, no server features, no gate)
 python3 -m http.server 8000        # → http://localhost:8000
 
-# full platform (passkey gate, permission relay) — local dev & self-host
-deno run --allow-net --allow-read --allow-write --allow-env server/main.ts
+# full platform (passkey gate, permission relay, emoji studio) — local dev & self-host
+deno task serve
 # → http://localhost:8787  (first run: create your passkey)
+#
+# emoji studio additionally needs the mesh dylib + a running combs serve:
+#   COMBS_MESH_LIB=~/Projects/CombsEngine/engine/core/target/release/libcombsmesh_ffi.dylib \
+#   COMBS_ENGINE_URL=http://127.0.0.1:8080 \
+#   deno task serve      # then open /flows/emoji-studio.html
 
 # hosted: same command behind HTTPS with env config:
 #   HOST=0.0.0.0 PORT=443 COMBSLLM_RP_ID=your.domain \

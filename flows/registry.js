@@ -30,6 +30,13 @@ export const flows = {
     // (remote)" in the model picker to enter this flow.
     owner: 'shell',
   },
+  'emoji-studio': {
+    title: 'Emoji Studio',
+    // Standalone page (flows/emoji-studio.html) hosted by server/emoji.ts;
+    // linked from the app header. Uses atoms/emoji + atoms/auth.
+    owner: 'page',
+    url: '/flows/emoji-studio.html',
+  },
   'agent-runs': {
     title: 'Agent Runs',
     loader: () => import('./agent-runs.js'),

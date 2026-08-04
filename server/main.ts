@@ -5,6 +5,7 @@
  *   /api/auth/*        passkey gate (register/login/logout/session)
  *   /api/relay         permission-gated outbound proxy (SSE-safe streaming)
  *   /api/permissions/* grant store (backend-owned)
+ *   /api/emoji/*       living-emoji host (needs COMBS_MESH_LIB dylib)
  *
  * Dual-mode (local dev / self-host / hosted) — same code, env-configured:
  *   PORT                default 8787
@@ -13,9 +14,11 @@
  *   COMBSLLM_ORIGINS    passkey origins (default localhost ports)
  *   COMBS_HOME          passkey store   (default ~/.cache/combs)
  *   COMBSLLM_DATA       app data dir    (default server/data)
+ *   COMBS_ENGINE_URL    combs serve for emoji personas (default :8080)
+ *   COMBS_MESH_LIB      libcombsmesh_ffi.dylib path (emoji host)
  *
  * Run:
- *   deno run --allow-net --allow-read --allow-write --allow-env server/main.ts
+ *   deno run --allow-net --allow-read --allow-write --allow-env --allow-ffi server/main.ts
  *
  * The browser NEVER talks to the network ungated when served by this
  * server: API routes (except auth) require a passkey session, and relay
@@ -24,6 +27,7 @@
 
 import { handleAuth, sessionToken } from "./authn.ts";
 import { PermissionStore } from "./permissions.ts";
+import { handleEmoji } from "./emoji.ts";
 
 const PORT = Number(Deno.env.get("PORT") || 8787);
 const HOST = Deno.env.get("HOST") || "127.0.0.1";
@@ -143,6 +147,7 @@ async function handler(req: Request): Promise<Response> {
     }
 
     if (path === "/api/relay" && req.method === "POST") return await handleRelay(req);
+    if (path.startsWith("/api/emoji/")) return await handleEmoji(req, url);
 
     if (path === "/api/permissions" && req.method === "GET") {
       return json(permissions.snapshot());
@@ -168,3 +173,4 @@ console.log(`[combsllm] listening on http://${HOST}:${PORT}`);
 console.log(`[combsllm] serving app from ${ROOT}`);
 console.log(`[combsllm] data dir: ${DATA_DIR}`);
 console.log(`[combsllm] passkey RP: ${Deno.env.get("COMBSLLM_RP_ID") || "localhost"} (origins: ${Deno.env.get("COMBSLLM_ORIGINS") || "localhost defaults"})`);
+console.log(`[combsllm] emoji host: ${Deno.env.get("COMBS_MESH_LIB") ? `enabled (${Deno.env.get("COMBS_MESH_LIB")})` : "DISABLED — set COMBS_MESH_LIB to libcombsmesh_ffi.dylib"}`);
