@@ -9,7 +9,13 @@
 // The SSE parser keeps the final `usage` chunk — the npm combs-client
 // drops it, so this vendored parser is the usage-keeping fork (upstream
 // candidate for combs-client, tracked in the platform plan).
+//
+// When the app is served by the CombsLLM server, traffic goes through
+// the permission-gated /api/relay (scope net:combs-engine); statically
+// hosted, it fetches the engine directly.
 // ============================================================
+
+import { relayFetch } from '../relay/index.js';
 
 const LS_URL = 'combsllm.combsEngineUrl';
 const LS_TOKEN = 'combsllm.combsEngineToken';
@@ -56,7 +62,11 @@ export class CombsRemoteBackend {
   // No artifact to mount — just remember the endpoint and probe /health.
   async mount(_modelDef, _blobUrl, { engineUrl } = {}) {
     this.baseUrl = (engineUrl || combsEngineUrl()).replace(/\/+$/, '');
-    const res = await fetch(`${this.baseUrl}/health`, { headers: this.headers() });
+    const res = await relayFetch(`${this.baseUrl}/health`, {
+      headers: this.headers(),
+      scope: 'net:combs-engine',
+      detail: `Connect to the Combs engine at ${this.baseUrl}`,
+    });
     if (!res.ok) throw new Error(`combs serve unreachable at ${this.baseUrl} (HTTP ${res.status})`);
     // One named session per mount — the engine rolls back to the longest
     // common token prefix on every request, so replayed/pruned histories
@@ -75,9 +85,11 @@ export class CombsRemoteBackend {
 
   async send(_content, { history = [] } = {}, onText) {
     this.abort = new AbortController();
-    const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+    const res = await relayFetch(`${this.baseUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...this.headers() },
+      scope: 'net:combs-engine',
+      detail: `Chat completion via the Combs engine at ${this.baseUrl}`,
       body: JSON.stringify({
         model: 'default',
         messages: toOpenAiMessages(history),

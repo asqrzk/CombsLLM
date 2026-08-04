@@ -9,11 +9,17 @@ agent runs with supervisor loops, MCP tools — plus server-backed flows
 ## Run it
 
 ```sh
-# static only (on-device inference, no server features)
+# static only (on-device inference, no server features, no gate)
 python3 -m http.server 8000        # → http://localhost:8000
 
-# full platform (server flows: passkeys, relay, emoji host) — Phase 3+
-deno run --allow-net --allow-read --allow-ffi --allow-env server/main.ts
+# full platform (passkey gate, permission relay) — local dev & self-host
+deno run --allow-net --allow-read --allow-write --allow-env server/main.ts
+# → http://localhost:8787  (first run: create your passkey)
+
+# hosted: same command behind HTTPS with env config:
+#   HOST=0.0.0.0 PORT=443 COMBSLLM_RP_ID=your.domain \
+#   COMBSLLM_ORIGINS=https://your.domain COMBS_HOME=/srv/combsllm/home \
+#   deno run --allow-net --allow-read --allow-write --allow-env server/main.ts
 ```
 
 First run downloads a multi-GB model from HuggingFace into the browser's

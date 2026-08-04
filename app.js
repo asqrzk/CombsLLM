@@ -22,6 +22,7 @@ import {
   confirmModal, storageModal, storageModalBody,
   storageModalClose, storageModalDone, storageModalPurge
 } from './atoms/dom.js';
+import { bootAuthGate } from './atoms/auth/index.js';
 import { combsEngineUrl, setCombsEngineUrl } from './atoms/backends/combs-remote.js';
 import { idbPut, idbGet, idbGetAll, idbDelete } from './atoms/store.js';
 import { toast, showConfirmModal, hideConfirmModal } from './atoms/ui.js';
@@ -908,6 +909,10 @@ async function onModelPicked(id) {
 }
 
 (async function init() {
+  // Passkey gate: when served by the CombsLLM server, boot behind it —
+  // no session → overlay ceremony → reload. Static hosting skips this.
+  if (!(await bootAuthGate())) return;
+
   if (localStorage.getItem('combsllm.consoleCollapsed') === '1') {
     consolePanel.classList.add('collapsed');
     toggleConsoleBtn.classList.remove('active');

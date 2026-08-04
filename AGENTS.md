@@ -15,9 +15,19 @@ Keep it that way.
   emoji-studio), wired via `flows/registry.js`. The chat flow is still
   shell-owned by `app.js` (extraction is future work).
 - `tests/` — browser smoke page (`/tests/` when served), no framework.
-- `server/` — Deno hosted layer (Phase 3+): static, `/api/authn`,
-  `/api/relay`, `/api/emoji`. Runtime secrets live in `server/data/` and
-  `server/*.key` (gitignored, mode 600).
+- `server/` — Deno hosted layer: static serving, `/api/auth/*` (passkey
+  gate + sessions, `authn.ts`), `/api/relay` (permission-gated outbound
+  proxy), `/api/permissions/*` (`permissions.ts`). Dual-mode: local dev /
+  self-host / hosted — same code, env-configured (`PORT`, `HOST`,
+  `COMBSLLM_RP_ID`, `COMBSLLM_ORIGINS`, `COMBS_HOME`, `COMBSLLM_DATA`).
+  App data in `server/data/` (gitignored, mode 600); passkey credentials
+  global in `$COMBS_HOME/authn.json` (shared with the whole Combs
+  ecosystem on the machine).
+- `atoms/auth/` — client gate: server probe → passkey overlay → reload.
+  Static hosting skips the gate entirely.
+- `atoms/relay/` — `relayFetch`: routed via `/api/relay` when server-
+  hosted (428 → permission dialog → decide → retry), direct fetch when
+  static.
 - `mcp-proxy.mjs` — zero-dep Node CORS proxy for local MCP servers
 - `docs/` — learnings + archive
 
@@ -40,6 +50,9 @@ Keep it that way.
 
 ```sh
 python3 -m http.server 8000    # static app
+deno run --allow-net --allow-read --allow-write --allow-env server/main.ts
+                               # full platform on :8787 (PORT env to change)
+deno check server/main.ts      # server type-check
 ```
 
 Regression checklist after ANY change (manual, browser):
