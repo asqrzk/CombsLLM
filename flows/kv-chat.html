@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<!-- kv-chat flow — full-transcript chat on the engine's rolling-session
+     KV prefix reuse, with a live per-turn cache panel. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CombsLLM — KV chat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#f4f4f5; --panel:#fff; --border:#e4e4e7; --fg:#18181b; --dim:#71717a; --accent:#18181b; --green:#16a34a; --greenbg:#f0fdf4; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 -apple-system, "Helvetica Neue", sans-serif; }
+  header { padding:12px 20px; border-bottom:1px solid var(--border); background:var(--panel); display:flex; align-items:baseline; gap:12px; }
+  header h1 { font-size:15px; margin:0; }
+  header span { color:var(--dim); font-size:12px; }
+  header a { margin-left:auto; color:var(--dim); font-size:12px; text-decoration:none; }
+  header a:hover { color:var(--fg); }
+  main { display:grid; grid-template-columns:1fr 360px; gap:16px; padding:16px 20px; max-width:1200px; margin:0 auto; }
+  @media (max-width:900px) { main { grid-template-columns:1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px; }
+  .panel h2 { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin:0 0 10px; }
+  #chatlog { height:52vh; min-height:280px; overflow:auto; display:flex; flex-direction:column; gap:8px; margin-bottom:10px; }
+  .msg { max-width:82%; padding:8px 12px; border-radius:12px; font-size:13px; white-space:pre-wrap; }
+  .msg.user { align-self:flex-end; background:#18181b; color:#fafafa; }
+  .msg.bot { align-self:flex-start; background:#f4f4f5; border:1px solid var(--border); }
+  .msg.sys { align-self:center; background:none; color:var(--dim); font-size:11px; }
+  .cursor { animation:pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity:0; } }
+  #composer { display:flex; gap:8px; }
+  #composer input { flex:1; border:1px solid var(--border); border-radius:8px; padding:9px 12px; font:inherit; }
+  #composer button { background:var(--accent); color:#fafafa; border:0; border-radius:8px; padding:9px 16px; font:inherit; cursor:pointer; }
+  #composer button:disabled { opacity:.4; cursor:wait; }
+  #agg { text-align:center; padding:6px 0 12px; border-bottom:1px solid var(--border); margin-bottom:10px; }
+  #agg .big { font-size:30px; font-weight:600; color:var(--green); }
+  #agg .lbl { font-size:11px; color:var(--dim); }
+  #agg .track { height:8px; background:var(--bg); border-radius:99px; overflow:hidden; margin-top:8px; }
+  #agg .fill { height:100%; background:var(--green); border-radius:99px; transition:width .5s; }
+  .turn { padding:8px 0; border-bottom:1px dashed var(--border); font-size:11px; }
+  .turn .row { display:flex; justify-content:space-between; align-items:center; }
+  .turn .badge { padding:1px 8px; border-radius:99px; border:1px solid var(--border); color:var(--dim); }
+  .turn .badge.hot { color:var(--green); border-color:var(--green); background:var(--greenbg); }
+  .turn .badge.warm { color:var(--fg); border-color:var(--fg); }
+  .turn .mini { height:4px; background:var(--bg); border-radius:99px; overflow:hidden; margin:5px 0; }
+  .turn .mini div { height:100%; background:var(--green); }
+  .turn .cap { color:var(--dim); }
+  #setup { max-width:34rem; margin:12vh auto; text-align:center; color:var(--dim); }
+  #setup code { background:#fff; border:1px solid var(--border); border-radius:6px; padding:2px 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>⚡ KV chat</h1>
+  <span>full transcript · rolling-session prefix reuse · every turn shows its cache hit</span>
+  <a href="/flows/">← flows</a>
+</header>
+<main id="main" hidden>
+  <div class="panel">
+    <h2>Chat (combs serve)</h2>
+    <div id="chatlog"></div>
+    <div id="composer">
+      <input id="inp" placeholder="long conversation works best — watch the cache hit rate climb…" autofocus>
+      <button id="send">Send</button>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>KV cache</h2>
+    <div id="agg"><div class="big">0</div><div class="lbl">prompt tokens saved</div>
+      <div class="track"><div class="fill" style="width:0%"></div></div>
+      <div class="lbl" id="avg" style="margin-top:4px">no turns yet</div></div>
+    <div id="turns"></div>
+  </div>
+</main>
+<div id="setup" hidden></div>
+<script type="module">
+import { streamChatWithUsage, engineBase } from '../atoms/engine/index.js';
+import { hasServer } from '../atoms/auth/index.js';
+
+const $ = (id) => document.getElementById(id);
+const SYSTEM = 'You are a helpful assistant. Answer concisely.';
+
+const turns = [];   // {role, content}
+const stats = [];   // {prompt, cached, completion, ttftMs}
+let busy = false;
+
+function bubble(cls, text) {
+  const d = document.createElement('div');
+  d.className = 'msg ' + cls; d.textContent = text;
+  $('chatlog').appendChild(d); $('chatlog').scrollTop = 1e9;
+  return d;
+}
+
+function renderStats() {
+  const totalSaved = stats.reduce((a, s) => a + s.cached, 0);
+  const totalPrompt = stats.reduce((a, s) => a + s.prompt, 0);
+  const rate = totalPrompt ? totalSaved / totalPrompt : 0;
+  $('agg').querySelector('.big').textContent = totalSaved.toLocaleString();
+  $('agg').querySelector('.fill').style.width = `${Math.round(rate * 100)}%`;
+  $('avg').textContent = stats.length ? `avg hit rate ${(rate * 100).toFixed(0)}% over ${stats.length} turns` : 'no turns yet';
+  $('turns').innerHTML = stats.map((s, i) => {
+    const pct = s.prompt ? Math.round((s.cached / s.prompt) * 100) : 0;
+    const cls = pct > 80 ? 'hot' : pct > 0 ? 'warm' : '';
+    return `<div class="turn"><div class="row"><span>turn ${i + 1}</span>
+      <span class="badge ${cls}">${pct}% cached</span></div>
+      <div class="mini"><div style="width:${pct}%"></div></div>
+      <div class="cap">${s.cached}/${s.prompt} prompt tokens cached · +${s.completion} generated · ttft ${s.ttftMs}ms</div></div>`;
+  }).reverse().join('');
+}
+
+async function send() {
+  const inp = $('inp'), text = inp.value.trim();
+  if (!text || busy) return;
+  busy = true; inp.value = ''; $('send').disabled = true;
+
+  turns.push({ role: 'user', content: text });
+  bubble('user', text);
+  const reply = bubble('bot', '');
+  const cursor = document.createElement('span');
+  cursor.className = 'cursor'; cursor.textContent = '▍';
+  reply.appendChild(cursor);
+
+  // Full append-only transcript — the rolling session serves the prefix.
+  const messages = [{ role: 'system', content: SYSTEM }, ...turns];
+  let generated = '';
+  let ttftMs = 0;
+  let usage = null;
+  const t0 = performance.now();
+
+  await streamChatWithUsage('', messages, { maxTokens: 256, temperature: 0.7 }, {
+    onDelta(t) {
+      if (!ttftMs) ttftMs = Math.round(performance.now() - t0);
+      generated += t;
+      reply.textContent = generated;
+      reply.appendChild(cursor);
+      $('chatlog').scrollTop = 1e9;
+    },
+    onUsage(u) { usage = u; },
+    onDone() {
+      cursor.remove();
+      turns.push({ role: 'assistant', content: generated });
+      if (usage) {
+        stats.push({
+          prompt: usage.prompt_tokens ?? 0,
+          cached: usage.prompt_tokens_details?.cached_tokens ?? 0,
+          completion: usage.completion_tokens ?? 0,
+          ttftMs,
+        });
+        renderStats();
+      }
+    },
+    onError(e) {
+      cursor.remove();
+      reply.textContent = `error: ${e.message}`;
+      bubble('sys', 'engine unreachable — check Engine URL in the app console / start combs serve');
+    },
+  });
+
+  busy = false; $('send').disabled = false; inp.focus();
+}
+$('send').onclick = send;
+$('inp').addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+
+(async () => {
+  if (!(await hasServer())) {
+    $('setup').hidden = false;
+    $('setup').innerHTML = `<h2>KV chat needs an engine</h2>
+      <p>Start <code>combs serve --model … --port 8080</code> and open this page via
+      <code>deno task serve</code> (http://localhost:8787/flows/kv-chat.html).<br>
+      Engine URL: <code>${engineBase()}</code></p>`;
+    return;
+  }
+  $('main').hidden = false;
+  bubble('sys', `engine: ${engineBase()} · anonymous rolling session`);
+})();
+</script>
+</body>
+</html>
