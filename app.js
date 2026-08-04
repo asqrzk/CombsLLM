@@ -9,7 +9,7 @@ import {
 } from './atoms/config.js';
 import { state } from './atoms/state.js';
 import {
-  app, chatBox, inputField, sendBtn, loadBtn, attachBtn, imageUpload,
+  app, chatBox, inputField, sendBtn, loadBtn, stopEngineBtn, attachBtn, imageUpload,
   attachChip, attachChipName, attachChipRemove, micBtn, audioChip, audioChipName, audioChipRemove,
   compressBtn, clearCacheBtn,
   contextLimitInput, cavemanToggle, reasoningToggle, visionToggle, audioToggle,
@@ -406,6 +406,7 @@ function setEngineStatus(state_, text) {
     loadBtn.classList.add(state_);
   }
   engineStatusText.textContent = text;
+  stopEngineBtn.disabled = state_ !== 'ready';
 }
 
 async function disposeBackend() {
@@ -792,6 +793,14 @@ loadBtn.addEventListener('click', () => {
     return;
   }
   initModel();
+});
+
+// Explicit engine stop (the long-press still works too), and best-effort
+// offload when leaving the page so flow pages (emoji studio, debate) and
+// closed tabs never hold a multi-GB WebGPU model hostage.
+stopEngineBtn.addEventListener('click', offloadEngine);
+window.addEventListener('pagehide', () => {
+  if (state.backend) disposeBackend();
 });
 
 document.addEventListener('keydown', (e) => {

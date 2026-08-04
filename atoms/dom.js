@@ -12,6 +12,7 @@ export const composer = $('composer');
 export const inputField = $('prompt-input');
 export const sendBtn = $('send-btn');
 export const loadBtn = $('load-btn');
+export const stopEngineBtn = $('stop-engine-btn');
 export const attachBtn = $('attach-btn');
 export const imageUpload = $('image-upload');
 export const attachChip = $('attach-chip');
